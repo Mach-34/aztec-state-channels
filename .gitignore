@@ -1,0 +1,8 @@
+.env
+node_modules
+yarn-error.log
+cache
+contracts/target
+contracts/--compiler
+log
+crs

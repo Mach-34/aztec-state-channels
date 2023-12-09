@@ -1,0 +1,25 @@
+{
+    "compilerOptions": {
+      "rootDirs": ["src", "tests"],
+      "target": "es2020",
+      "lib": ["dom", "esnext", "es2017.object"],
+      "module": "NodeNext",
+      "moduleResolution": "NodeNext",
+      "strict": true,
+      "declaration": true,
+      "allowSyntheticDefaultImports": true,
+      "esModuleInterop": true,
+      "downlevelIteration": true,
+      "inlineSourceMap": true,
+      "declarationMap": true,
+      "importHelpers": true,
+      "resolveJsonModule": true,
+      "skipLibCheck": true,
+    },
+    "include": [
+      "src",
+      "tests",
+      "jest.config.ts",
+      ".babelrc"
+    ],
+  }
