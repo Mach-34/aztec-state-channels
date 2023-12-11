@@ -6,12 +6,12 @@ import {
     PXE,
     TxStatus,
     Wallet as AztecWallet,
-    FunctionCall,
-    TxExecutionRequest,
+    // FunctionCall,
+    // TxExecutionRequest,
 } from '@aztec/aztec.js';
 import { CounterStateChannelContract } from './artifacts/CounterStateChannel.js';
-import { ExecutionResult } from '@aztec/types';
-import { KernelProof } from './utils.js';
+// import { ExecutionResult } from '@aztec/types';
+// import { KernelProof } from './utils.js';
 
 /**
  * Deploy L2 Contract
@@ -137,42 +137,42 @@ export class StateChannelDriver {
         return count;
     }
 
-    async functionCall(from: AztecWallet): Promise<FunctionCall> {
-        // connect wallet to contract
-        const contract = await CounterStateChannelContract.at(this.contractAddress, from);
-        // generate the execution request for the increment tx
-        const request = await contract.methods.increment_multiple().request();
-        return request;
-    }
+    // async functionCall(from: AztecWallet): Promise<FunctionCall> {
+    //     // connect wallet to contract
+    //     const contract = await CounterStateChannelContract.at(this.contractAddress, from);
+    //     // generate the execution request for the increment tx
+    //     const request = await contract.methods.increment_multiple().request();
+    //     return request;
+    // }
 
-    async simulate(from: AztecWallet): Promise<TxExecutionRequest> {
-        // connect wallet to contract
-        const contract = await CounterStateChannelContract.at(this.contractAddress, from);
-        // generate the execution request for the increment tx
-        const request = await contract.methods.increment_multiple().create();
-        return request;
-    }
+    // async simulate(from: AztecWallet): Promise<TxExecutionRequest> {
+    //     // connect wallet to contract
+    //     const contract = await CounterStateChannelContract.at(this.contractAddress, from);
+    //     // generate the execution request for the increment tx
+    //     const request = await contract.methods.increment_multiple().create();
+    //     return request;
+    // }
 
-    async getSimulationParameters(from: AztecWallet): Promise<ExecutionResult> {
-        // connect wallet to contract
-        const contract = await CounterStateChannelContract.at(this.contractAddress, from);
-        // generate the execution request for the increment tx
-        const request = await contract.methods.increment_multiple().create();
-        // simulate the execution request
-        const result = await this.pxe.getSimulationParameters(request);
-        return result;
-    }
+    // async getSimulationParameters(from: AztecWallet): Promise<ExecutionResult> {
+    //     // connect wallet to contract
+    //     const contract = await CounterStateChannelContract.at(this.contractAddress, from);
+    //     // generate the execution request for the increment tx
+    //     const request = await contract.methods.increment_multiple().create();
+    //     // simulate the execution request
+    //     const result = await this.pxe.getSimulationParameters(request);
+    //     return result;
+    // }
 
-    async initProof(from: AztecWallet): Promise<KernelProof> {
-        // connect wallet to contract
-        const contract = await CounterStateChannelContract.at(this.contractAddress, from);
-        // generate execution request
-        const request = await contract.methods.increment_multiple().create();
-        console.log("Request", request);
-        // generate the first proof (init proof) for the state channel via kernel proving
-        const kernelProof = await from.proveInit(request);
-        return kernelProof;
-    }
+    // async initProof(from: AztecWallet): Promise<KernelProof> {
+    //     // connect wallet to contract
+    //     const contract = await CounterStateChannelContract.at(this.contractAddress, from);
+    //     // generate execution request
+    //     const request = await contract.methods.increment_multiple().create();
+    //     console.log("Request", request);
+    //     // generate the first proof (init proof) for the state channel via kernel proving
+    //     const kernelProof = await from.proveInit(request);
+    //     return kernelProof;
+    // }
 
     // /**
     //  * Construct the private call data for an iteration of the kernel prover
