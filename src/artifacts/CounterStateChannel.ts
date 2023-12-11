@@ -85,6 +85,9 @@ export class CounterStateChannelContract extends ContractBase {
     /** get_counter(owner: field) */
     get_counter: ((owner: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
 
+    /** increment_by(amount: field) */
+    increment_by: ((amount: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
+
     /** increment_multiple() */
     increment_multiple: (() => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
 

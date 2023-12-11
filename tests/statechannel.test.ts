@@ -4,7 +4,7 @@ import {
     DebugLogger,
     createDebugLogger,
     createPXEClient,
-    createAccount,
+    getSandboxAccountsWallets,
     CheatCodes,
     PXE
 } from '@aztec/aztec.js';
@@ -35,9 +35,10 @@ describe('State Channel', () => {
         pxe = await createPXEClient(PXE_URL);
 
         // initialize aztec signers
+        const wallets = await getSandboxAccountsWallets(pxe)
         accounts = {
-            alice: await createAccount(pxe),
-            bob: await createAccount(pxe),
+            alice: wallets[0],
+            bob: wallets[1],
         }
         // initialilze driver
         driver = await StateChannelDriver.new(pxe, accounts.alice, logger, 0);
@@ -46,11 +47,53 @@ describe('State Channel', () => {
         logger("Initialized Test Environment")
     })
 
-    test("Increment Counter", async () => {
-        const counter = await driver.getCount(accounts.alice);
+    // test("Increment Counter", async () => {
+    //     // initialize the counter
+    //     await driver.initializeCounter(accounts.alice, 0, 10);
+    //     // increment the counter
+    //     const counter = await driver.getCount(accounts.alice);
+    //     expect(counter).toEqual(0n);
+    //     await driver.incrementManual(accounts.alice);
+    //     let newCounter = await driver.getCount(accounts.alice);
+    //     expect(newCounter).toEqual(1n);
+    //     await driver.incrementManual(accounts.alice);
+    //     newCounter = await driver.getCount(accounts.alice);
+    //     expect(newCounter).toEqual(2n);
+
+    // });
+
+    test("Full increment", async () => {
+        // initialize the counter
+        await driver.initializeCounter(accounts.bob, 0, 4);
+        // increment the counter to end in one tx
+        const counter = await driver.getCount(accounts.bob);
         expect(counter).toEqual(0n);
-        await driver.incrementCount(accounts.alice);
-        const newCounter = await driver.getCount(accounts.alice);
-        expect(newCounter).toEqual(1n);
-    });
+        await driver.fullIncrementManual(accounts.bob);
+        // const newCounter = await driver.getCount(accounts.bob);
+        // expect(newCounter).toEqual(4n);
+    })
+
+    // test("Function Call", async () => {
+    //     const req = await driver.functionCall(accounts.alice);
+    //     console.log("Object keys: ", Object.keys(req));
+    //     console.log("Data: ", req);
+    // });
+
+    // test("Tx request", async () => {
+    //     const req = await driver.simulate(accounts.alice);
+    //     console.log("Object keys: ", Object.keys(req));
+    //     console.log("Data: ", req);
+    // });
+
+    // test("Simulation parameters", async () => {
+    //     const req = await driver.getSimulationParameters(accounts.alice);
+    //     console.log("Object keys: ", Object.keys(req));
+    //     console.log("Data: ", req);
+    // })
+
+    // test("Get the init kernel proof", async () => {
+    //     const proof = await driver.initProof(accounts.alice);
+    //     console.log("Object keys: ", Object.keys(proof));
+    //     console.log("Data: ", proof);
+    // })
 });

@@ -6,28 +6,12 @@ import {
     PXE,
     TxStatus,
     Wallet as AztecWallet,
+    FunctionCall,
+    TxExecutionRequest,
 } from '@aztec/aztec.js';
-import { CounterContract } from './artifacts/Counter.js';
-import {
-    PrivateCallData,
-    PreviousKernelData,
-    PrivateKernelInputsInit,
-    PrivateKernelInputsInner,
-    PrivateKernelInputsOrdering,
-    PrivateKernelPublicInputs,
-    makeEmptyProof,
-    VerificationKey
-} from '@aztec/circuits.js';
-import { ExecutionResult, NoteAndSlot } from '@aztec/acir-simulator';
-import {
-    KernelProver,
-    OutputNoteData,
-} from '../node_modules/@aztec/pxe/dest/kernel_prover/kernel_prover.js';
-import {
-    ProofOutput,
-    ProofCreator,
-    KernelProofCreator
-} from '../node_modules/@aztec/pxe/dest/kernel_prover/proof_creator.js';
+import { CounterStateChannelContract } from './artifacts/CounterStateChannel.js';
+import { ExecutionResult } from '@aztec/types';
+import { KernelProof } from './utils.js';
 
 /**
  * Deploy L2 Contract
@@ -45,7 +29,7 @@ export async function deployAndInitialize(
     // get the address of the aztec wallet deploying the contract
     const address = aztecWallet.getCompleteAddress().address;
     // deploy the contract
-    const deployReceipt = await CounterContract.deploy(aztecWallet, startingIndex, address)
+    const deployReceipt = await CounterStateChannelContract.deploy(aztecWallet)
         .send()
         .wait();
     // check that the deploy tx is confirmed
@@ -84,7 +68,6 @@ export class StateChannelDriver {
             logger,
             contractAddress,
             startingIndex,
-            new KernelProofCreator(logger)
         );
     }
 
@@ -97,21 +80,43 @@ export class StateChannelDriver {
         public contractAddress: AztecAddress,
         /** Starting index for the counter contract */
         public startingIndex: number,
-        /** Kernel Proof Creator Instance */
-        public proofCreator: ProofCreator
     ) { }
 
     /**
-     * Increment the counter for a given account
+     * Initialize a new counter counter for a given account
      * 
-     * @param from - the AztecWallet to send increment counter for
+     * @param from - the AztecWallet to initialize the counter for
+     * @param start - the starting value for the counter
+     * @param end - the ending value to stop the counter at once reached
      */
-    async incrementCount(from: AztecWallet): Promise<void> {
+    async initializeCounter(from: AztecWallet, start: number, end: number): Promise<void> {
         // connect wallet to contract
-        const contract = await CounterContract.at(this.contractAddress, from);
+        const contract = await CounterStateChannelContract.at(this.contractAddress, from);
+        // send initialize tx
+        const receipt = await contract.methods.init_counter(start, end).send().wait();
+        // ensure tx was mined
+        if (receipt.status !== TxStatus.MINED) throw new Error(`Initialize tx status is ${receipt.status}`);
+    }
+
+    /**
+     * Increment the counter for a given account once (manually)
+     * 
+     * @param from - the AztecWallet to increment the counter for
+     */
+    async incrementManual(from: AztecWallet): Promise<void> {
+        // connect wallet to contract
+        const contract = await CounterStateChannelContract.at(this.contractAddress, from);
         // send increment tx
-        const address = from.getCompleteAddress().address
-        const receipt = await contract.methods.increment(address).send().wait();
+        const receipt = await contract.methods.increment_single().send().wait();
+        // ensure tx was mined
+        if (receipt.status !== TxStatus.MINED) throw new Error(`Increment tx status is ${receipt.status}`);
+    }
+
+    async fullIncrementManual(from: AztecWallet): Promise<void> {
+        // connect wallet to contract
+        const contract = await CounterStateChannelContract.at(this.contractAddress, from);
+        // send increment tx
+        const receipt = await contract.methods.increment_multiple().send().wait();
         // ensure tx was mined
         if (receipt.status !== TxStatus.MINED) throw new Error(`Increment tx status is ${receipt.status}`);
     }
@@ -124,7 +129,7 @@ export class StateChannelDriver {
      */
     async getCount(from: AztecWallet): Promise<FieldLike> {
         // connect wallet to contract
-        const contract = await CounterContract.at(this.contractAddress, from);
+        const contract = await CounterStateChannelContract.at(this.contractAddress, from);
         // view increment balance
         const address = from.getCompleteAddress().address
         const count = await contract.methods.get_counter(address).view();
@@ -132,31 +137,68 @@ export class StateChannelDriver {
         return count;
     }
 
-    /**
-     * Construct the private call data for an iteration of the kernel prover
-     */
-    async constructPrivateCallData(): Promise<PrivateCallData> {
-
+    async functionCall(from: AztecWallet): Promise<FunctionCall> {
+        // connect wallet to contract
+        const contract = await CounterStateChannelContract.at(this.contractAddress, from);
+        // generate the execution request for the increment tx
+        const request = await contract.methods.increment_multiple().request();
+        return request;
     }
 
-    /**
-     * Initializes a state channel by constructing a kernel proof for the first iteration
-     * that checks the integrity of the tx request
-     */
-    async initStateChannel(): Promise<void> {
-
+    async simulate(from: AztecWallet): Promise<TxExecutionRequest> {
+        // connect wallet to contract
+        const contract = await CounterStateChannelContract.at(this.contractAddress, from);
+        // generate the execution request for the increment tx
+        const request = await contract.methods.increment_multiple().create();
+        return request;
     }
 
-    async constructKernelProof(firstIteration: boolean, previousProof?: ProofOutput): Promise<ProofOutput> {
-        const executionStack = [executionResult];
-        const newNotes: { [commitmentStr: string]: OutputNoteData } = {};
-        let previousVerificationKey = VerificationKey.makeFake();
-
-        let output: ProofOutput = {
-            publicInputs: PrivateKernelPublicInputs.empty(),
-            proof: makeEmptyProof()
-        };
-
-
+    async getSimulationParameters(from: AztecWallet): Promise<ExecutionResult> {
+        // connect wallet to contract
+        const contract = await CounterStateChannelContract.at(this.contractAddress, from);
+        // generate the execution request for the increment tx
+        const request = await contract.methods.increment_multiple().create();
+        // simulate the execution request
+        const result = await this.pxe.getSimulationParameters(request);
+        return result;
     }
+
+    async initProof(from: AztecWallet): Promise<KernelProof> {
+        // connect wallet to contract
+        const contract = await CounterStateChannelContract.at(this.contractAddress, from);
+        // generate execution request
+        const request = await contract.methods.increment_multiple().create();
+        console.log("Request", request);
+        // generate the first proof (init proof) for the state channel via kernel proving
+        const kernelProof = await from.proveInit(request);
+        return kernelProof;
+    }
+
+    // /**
+    //  * Construct the private call data for an iteration of the kernel prover
+    //  */
+    // async constructPrivateCallData(): Promise<PrivateCallData> {
+
+    // }
+
+    // /**
+    //  * Initializes a state channel by constructing a kernel proof for the first iteration
+    //  * that checks the integrity of the tx request
+    //  */
+    // async initStateChannel(): Promise<void> {
+
+    // }
+
+    // async constructKernelProof(firstIteration: boolean, previousProof?: ProofOutput): Promise<ProofOutput> {
+    //     const executionStack = [executionResult];
+    //     const newNotes: { [commitmentStr: string]: OutputNoteData } = {};
+    //     let previousVerificationKey = VerificationKey.makeFake();
+
+    //     let output: ProofOutput = {
+    //         publicInputs: PrivateKernelPublicInputs.empty(),
+    //         proof: makeEmptyProof()
+    //     };
+
+
+    // }
 }

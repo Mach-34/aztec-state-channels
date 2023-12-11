@@ -1,5 +1,4 @@
 mod counter_note;
-mod value_note;
 
 contract CounterStateChannel {
     use dep::std::option::Option;
@@ -14,6 +13,8 @@ contract CounterStateChannel {
             singleton::Singleton
         },
         selector::compute_selector,
+        log::emit_encrypted_log,
+        oracle::get_public_key::get_public_key,
     };
     use crate::counter_note::{CounterNote, CounterNoteMethods, COUNTER_NOTE_LEN};
 
@@ -82,8 +83,39 @@ contract CounterStateChannel {
         );
         // increment value in note and replace in storage
         counter.value += 1;
-        counter_singleton.replace(&mut counter, true);
+        counter_singleton.replace(&mut counter, false);
+        emit_encrypted_log(
+            &mut context,
+            context.this_address(),
+            counter.header.storage_slot,
+            get_public_key(context.msg_sender()),
+            counter.serialize()
+        );
         // @todo: publicly mark counter as complete if start == end
+    }
+
+    #[aztec(private)]
+    fn increment_by(amount: Field) {
+        // get the msg sender as the owner
+        let owner = context.msg_sender();
+        // get the singleton from storage
+        let counter_singleton = storage.counters.at(owner);
+        // check that the counter can be incremented
+        let mut counter = counter_singleton.get_note(false);
+        assert(
+            counter.value as u120 < counter.end as u120,
+            "Counter has already been incremented to its end value"
+        );
+        // increment value in note and replace in storage
+        counter.value += amount;
+        counter_singleton.replace(&mut counter, false);
+        emit_encrypted_log(
+            &mut context,
+            context.this_address(),
+            counter.header.storage_slot,
+            get_public_key(context.msg_sender()),
+            counter.serialize()
+        );
     }
 
     /**
@@ -94,31 +126,40 @@ contract CounterStateChannel {
     fn increment_multiple() {
         // get the msg sender as the owner
         let owner = context.msg_sender();
-        // get the singleton from storage
+        // // get the singleton from storage
         let counter_singleton = storage.counters.at(owner);
         // get the counter note from storage
         let mut counter = counter_singleton.get_note(false);
+
         // increment value in note and replace in storage
         counter.value += 1;
         counter_singleton.replace(&mut counter, true);
-        // if the counter has not reached its end value, increment again
-        if counter.value as u120 < counter.end as u120 {
-            context.call_private_function(
-                context.this_address(),
-                compute_selector("increment_multiple"),
-                []
-            )
-        }
+
+        // emit_encrypted_log(
+        //     &mut context,
+        //     context.this_address(),
+        //     counter.header.storage_slot,
+        //     get_public_key(context.msg_sender()),
+        //     counter.serialize()
+        // );
+
+        // // if the counter has not reached its end value, increment again
+        // if counter.value as u120 < counter.end as u120 {
+        //     context.call_private_function_no_args(
+        //         context.this_address(),
+        //         compute_selector("increment_multiple()")
+        //     );
+        // }
+        context.call_private_function(
+            context.this_address(),
+            compute_selector("increment_by(Field)"),
+            [1]
+        );
     }
 
     unconstrained fn get_counter(owner: Field) -> Field {
         storage.counters.at(owner).view_note().value
     }
-
-    // unconstrained fn compute_note_hash_and_nullifier(contract_address: Field, nonce: Field, storage_slot: Field, preimage: [Field; VALUE_NOTE_LEN]) -> [Field; 4] {
-    //     let note_header = NoteHeader::new(contract_address, nonce, storage_slot);
-    //     note_utils::compute_note_hash_and_nullifier(ValueNoteMethods, note_header, preimage)
-    // }
 
     unconstrained fn compute_note_hash_and_nullifier(contract_address: Field, nonce: Field, storage_slot: Field, preimage: [Field; COUNTER_NOTE_LEN]) -> [Field; 4] {
         let note_header = NoteHeader::new(contract_address, nonce, storage_slot);

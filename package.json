@@ -4,13 +4,15 @@
   "main": "index.js",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "yarn": "please-use-npm"
+  },
   "scripts": {
     "artifacts": "./scripts/artifacts.sh",
     "sandbox": "SANDBOX_VERSION=0.16.7 /bin/bash -c \"$(curl -fsSL 'https://sandbox.aztec.network')\"",
     "test": "NODE_NO_WARNINGS=1 node --experimental-vm-modules $(yarn bin jest) --no-cache --runInBand --config jest.integration.config.json"
   },
   "devDependencies": {
-    "@aztec/aztec.js": "0.16.7",
     "@babel/core": "^7.23.2",
     "@babel/preset-env": "^7.23.2",
     "@babel/preset-typescript": "^7.23.2",
@@ -23,15 +25,15 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
-    "@aztec/acir-simulator": "0.16.7",
-    "@aztec/aztec-node": "0.16.7",
-    "@aztec/aztec.js": "0.16.7",
-    "@aztec/circuits.js": "0.16.7",
-    "@aztec/foundation": "0.16.7",
-    "@aztec/l1-contracts": "0.16.7",
-    "@aztec/noir-compiler": "0.16.7",
-    "@aztec/pxe": "0.16.7",
-    "@aztec/types": "0.16.7",
+    "@aztec/acir-simulator": "file:../aztec-packages/yarn-project/acir-simulator",
+    "@aztec/aztec-node": "file:../aztec-packages/yarn-project/aztec-node",
+    "@aztec/aztec.js": "file:../aztec-packages/yarn-project/aztec.js",
+    "@aztec/circuits.js": "file:../aztec-packages/yarn-project/circuits.js",
+    "@aztec/foundation": "file:../aztec-packages/yarn-project/foundation",
+    "@aztec/l1-contracts": "file:../aztec-packages/yarn-project/l1-artifacts",
+    "@aztec/noir-compiler": "file:../aztec-packages/yarn-project/noir-compiler",
+    "@aztec/pxe": "file:../aztec-packages/yarn-project/pxe",
+    "@aztec/types": "file:../aztec-packages/yarn-project/types",
     "@types/jest": "^29.5.6",
     "ethers": "^6.8.0"
   }

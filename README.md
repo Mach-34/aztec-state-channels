@@ -6,3 +6,5 @@ todo: docs
 
 
 As of 12.9.2023 (9.12.2023 outside burgerland) on Aztec Sandbox 0.16.7, there are some issues with aztec-cli. Make sure to see the [Artifacts script](./scripts/artifacts.sh) for more info on installing the correct dependencies.
+
+Installing from aztec-packages local build does not work with yarn, use npm

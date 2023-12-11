@@ -8,11 +8,11 @@ NC='\033[0m' # No Color
 EXPECTED_PATH="$HOME/.aztec/bin/aztec-cli"
 ACTUAL_PATH=$(which aztec-cli)
 
-INSTALL_CMD='SANDBOX_VERSION=0.16.7 /bin/bash -c "$(curl -fsSL 'https://sandbox.aztec.network')"'
+SANDBOX_CMD='SANDBOX_VERSION=0.16.7 /bin/bash -c "$(curl -fsSL 'https://sandbox.aztec.network')"'
 if [ "$ACTUAL_PATH" != "$EXPECTED_PATH" ]; then
     echo "${RED}Failed to compile Aztec State Channel contracts:${NC} aztec-cli not found in path."
     echo "First, make sure ${BLUE}@aztec/cli${NC} is not globally installed through npm or yarn."
-    echo "Then, run ${BLUE}${INSTALL_CMD}${NC} to install the working version of the aztec-cli."
+    echo "Then, run ${BLUE}${SANDBOX_CMD}${NC} to install the working version of the aztec-cli."
     exit 1
 fi
 

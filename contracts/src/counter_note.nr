@@ -14,11 +14,10 @@ use dep::aztec::{
     context::PrivateContext,
 };
 
-global COUNTER_NOTE_LEN: Field = 4;
+global COUNTER_NOTE_LEN: Field = 3;
 
 struct CounterNote {
     owner: Field,
-    randomness: Field,
     value: Field,
     end: Field,
     header: NoteHeader,
@@ -26,9 +25,8 @@ struct CounterNote {
 
 impl CounterNote {
     pub fn new(owner: Field, value: Field, end: Field) -> Self {
-        Self {
+        CounterNote {
             owner,
-            randomness: rand(),
             value,
             end,
             header: NoteHeader::empty()
@@ -36,15 +34,14 @@ impl CounterNote {
     }
 
     pub fn serialize(self) -> [Field; COUNTER_NOTE_LEN] {
-        [self.owner, self.randomness, self.value, self.end]
+        [self.owner, self.value, self.end]
     }
 
     pub fn deserialize(serialized: [Field; COUNTER_NOTE_LEN]) -> Self {
-        Self {
+        CounterNote {
             owner: serialized[0],
-            randomness: serialized[1],
-            value: serialized[2],
-            end: serialized[3],
+            value: serialized[1],
+            end: serialized[2],
             header: NoteHeader::empty()
         }
     }
