@@ -73,11 +73,6 @@ case "$OSTYPE" in
 esac
 
 # Clean up build space
-for subdir in "$contracts_dir"/*/; do
-    if [ -d "$subdir" ]; then
-        # Remove the "target" directory in the current subdirectory
-        rm -rf "$subdir/target"
-    fi
-done
+rm -rf ./contracts/*/target
 
 echo "${BLUE}Successfully compiled Aztec State Channel contracts.${NC}"
