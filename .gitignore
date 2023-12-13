@@ -4,5 +4,6 @@ yarn-error.log
 cache
 contracts/target
 contracts/--compiler
+src/artifacts
 log
 crs
