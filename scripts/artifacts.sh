@@ -1,6 +1,7 @@
 #!/bin/sh
 
-RED='\033[0;31m'
+RED='\033[0;31m'GREEN='\033[0;32m'
+GREEN='\033[0;32m'
 BLUE='\033[0;36m'
 NC='\033[0m' # No Color
 
@@ -16,37 +17,62 @@ if [ "$ACTUAL_PATH" != "$EXPECTED_PATH" ]; then
     exit 1
 fi
 
+contracts_dir="./contracts"
+
 # Check that artifacts asset dir exists
 if [ ! -d "./src/artifacts" ]; then
   mkdir ./src/artifacts
 fi
 
-# Compile State Channel contract artifacts
-cd ./contracts
-aztec-cli compile . -ts . > /dev/null
-cd ..
+# Create empty array to hold contract names
+contract_names=()
+
+# Loop through each contract directory and compile
+for subdir in "$contracts_dir"/*/; do
+    if [ -d "$subdir" ]; then
+        # Change to the subdirectory
+        cd "$subdir"
+
+        # Execute your commands in the subdirectory
+        aztec-cli compile . -ts . > /dev/null
+
+        # Extract the name of the TypeScript file
+        ts_file=$(ls *.ts)
+        if [[ -n $ts_file ]]; then
+            # Remove the file extension to get just the name
+            name="${ts_file%.ts}"
+            contract_names+=("$name")
+        fi
+        # Change back to the original directory
+        cd ../..
+    fi
+done
 
 # Move artifacts to the asserts directory in the typescript driver
-mv ./contracts/target/CounterStateChannel.json ./src/artifacts
-mv ./contracts/CounterStateChannel.ts ./src/artifacts
+mv ./contracts/*/target/*.json ./src/artifacts
+mv ./contracts/*/*.ts ./src/artifacts
 
-# Update the path for the ABI import in the typescript interface for the state channel contract
+# Update the path for the ABI import in the typescript interface for each contract
 case "$OSTYPE" in
     darwin*)
         # macOS
-        sed -i '' \
-            "s|target/CounterStateChannel.json|./CounterStateChannel.json|" \
-            src/artifacts/CounterStateChannel.ts
+        for name in "${contract_names[@]}"; do
+            sed -i '' \
+                "s|target/${name}.json|./${name}.json|" \
+                src/artifacts/${name}.ts
+        done
         ;;
     *)
         # Linux
-        sed -i \
-            "s|target/CounterStateChannel.json|./CounterStateChannel.json|" \
-            src/artifacts/CounterStateChannel.ts
+        for name in "${contract_names[@]}"; do
+            sed -i \
+                "s|target/${name}.json|./${name}.json|" \
+                src/artifacts/${name}.ts
+        done
         ;;
 esac
 
 # Clean up build space
-rm -rf ./contracts/target
+rm -rf ./contracts/*/target
 
 echo "${BLUE}Successfully compiled Aztec State Channel contracts.${NC}"
