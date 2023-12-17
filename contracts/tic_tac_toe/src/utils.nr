@@ -49,3 +49,10 @@ pub fn legal_move(board: [u8; 9], row: u8, col: u8) {
     // Coordinate must not be occupied
     assert(board[col + row * 3] == 0);
 }
+
+#[oracle(popCapsule)]
+fn pop_capsule_oracle() -> [Field; 2] {}
+
+unconstrained pub fn pop_capsule() -> [Field; 2] {
+    pop_capsule_oracle()
+}

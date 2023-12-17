@@ -37,7 +37,8 @@ contract TicTacToe {
             active_game, 
             can_play, 
             check_winner, 
-            legal_move 
+            legal_move,
+            pop_capsule
         }
     };
 
@@ -136,6 +137,26 @@ contract TicTacToe {
             winner
         })
     }
+
+    /*
+    *   Play entire game in one transaction
+    */
+    #[aztec(public)]
+    fn play_game(index: Field) {
+        let move = pop_capsule();
+        let mut prev_board = storage.board.at(index).read();
+        legal_move(prev_board, move[0], move[1]);
+        // prev_board[col + row * 3] = 
+        storage.board.at(index).write();
+
+        context.call_public_function(
+            context.this_address(),
+            compute_selector("play_game(Field)"),
+            [0]
+        );
+
+    }
+
 
     /* ===== Functions for testing ===== */
 
