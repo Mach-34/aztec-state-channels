@@ -28,6 +28,19 @@ pub fn can_play(game: Game, sender: Field) {
     }
 }
 
+// Check whether endgame condition has been met for state channel
+// TODO: Handle draw condition
+pub fn check_game_over(board: [u8; 9]) -> bool {
+    WINNING_PLACEMENTS.any(|placement: [Field; 3]| {
+        let mut total = 0;  
+        for i in 0..3 {
+            total += board[placement[i] as u8];
+        }
+        // Winning score is going to be 3 if host, 12 if player
+        (total == 3) | (total == 12)
+    })
+}
+
 pub fn check_winner(board: [u8; 9], is_host: bool) -> bool {
     WINNING_PLACEMENTS.any(|placement: [Field; 3]| {
         let mut total = 0;  
@@ -51,8 +64,8 @@ pub fn legal_move(board: [u8; 9], row: u8, col: u8) {
 }
 
 #[oracle(popCapsule)]
-fn pop_capsule_oracle() -> [Field; 2] {}
+fn pop_capsule_oracle() -> [Field; 3] {}
 
-unconstrained pub fn pop_capsule() -> [Field; 2] {
+unconstrained pub fn pop_capsule() -> [Field; 3] {
     pop_capsule_oracle()
 }

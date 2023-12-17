@@ -8,6 +8,7 @@ contract TicTacToe {
             note_header::NoteHeader,
             utils as note_utils,
         },
+        selector::compute_selector,
         state_vars::{
             map::Map,
             set::Set,
@@ -36,6 +37,7 @@ contract TicTacToe {
         utils::{ 
             active_game, 
             can_play, 
+            check_game_over,
             check_winner, 
             legal_move,
             pop_capsule
@@ -97,11 +99,6 @@ contract TicTacToe {
         storage.games.at(index).write(game);
     }
 
-    #[aztec(private)]
-    fn play_game() {
-        
-    }
-
     #[aztec(public)]
     fn turn(index: Field, row: u8, col: u8) {
         let game = storage.games.at(index).read();
@@ -145,16 +142,47 @@ contract TicTacToe {
     fn play_game(index: Field) {
         let move = pop_capsule();
         let mut prev_board = storage.board.at(index).read();
-        legal_move(prev_board, move[0], move[1]);
-        // prev_board[col + row * 3] = 
-        storage.board.at(index).write();
 
-        context.call_public_function(
-            context.this_address(),
-            compute_selector("play_game(Field)"),
-            [0]
-        );
+        // Check legal move
+        // legal_move(prev_board, move[0] as u8, move[1] as u8);
 
+        // let coord = move[0] + move[1] * 3;
+
+        // Check whether player is host or not
+        // if(move[2] == 0) {
+        //     prev_board[coord] = 1;
+        // } else {
+        //     prev_board[coord] = 4;
+        // }
+        // storage.board.at(index).write(prev_board);
+
+        // let game_over = check_game_over(prev_board);
+
+        // if(game_over == false) {
+        //     context.call_public_function(
+        //         context.this_address(),
+        //         compute_selector("play_game(Field)"),
+        //         [index]
+        //     );
+        // }
+    }
+
+    // TODO: Add signatures in place of passed in addresses
+    #[aztec(public)]
+    fn open_channel(host: Field, player: Field) {
+        // Initialize a new game with msg_sender as the host
+        let game = Game {
+            host: AztecAddress::new(host),
+            player: AztecAddress::new(player),
+            turn: 0,
+            winner: AztecAddress::new(0)
+        };
+        let current_game_index = storage.current_game.read();
+        storage.games.at(current_game_index).write(game);
+
+        // Increment active game index
+        let new_game_index = current_game_index + 1;
+        storage.current_game.write(new_game_index);
     }
 
 
