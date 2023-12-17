@@ -96,6 +96,11 @@ contract TicTacToe {
         storage.games.at(index).write(game);
     }
 
+    #[aztec(private)]
+    fn play_game() {
+        
+    }
+
     #[aztec(public)]
     fn turn(index: Field, row: u8, col: u8) {
         let game = storage.games.at(index).read();
