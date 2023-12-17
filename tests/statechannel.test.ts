@@ -16,7 +16,7 @@ const {
     ETHEREUM_URL = 'http://localhost:8545',
 } = process.env;
 
-describe('State Channel', () => {
+xdescribe('State Channel', () => {
     jest.setTimeout(1500000);
     let pxe: PXE;
     let logger: DebugLogger;

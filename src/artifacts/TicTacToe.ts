@@ -94,6 +94,12 @@ export class TicTacToeContract extends ContractBase {
     /** join_game(index: field) */
     join_game: ((index: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
 
+    /** open_channel(host: field, player: field) */
+    open_channel: ((host: FieldLike, player: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
+
+    /** play_game(index: field) */
+    play_game: ((index: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
+
     /** start_game() */
     start_game: (() => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
 
