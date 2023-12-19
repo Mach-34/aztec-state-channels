@@ -9,9 +9,10 @@ import {
     FunctionCall,
     TxExecutionRequest,
 } from '@aztec/aztec.js';
+import { KernelProofData } from '@aztec/types';
 import { CounterStateChannelContract } from './artifacts/CounterStateChannel.js';
 import { ExecutionResult } from '@aztec/types';
-import { KernelProof } from './utils.js';
+// import { KernelProof } from './utils.js';
 
 /**
  * Deploy L2 Contract
@@ -93,7 +94,8 @@ export class StateChannelDriver {
         // connect wallet to contract
         const contract = await CounterStateChannelContract.at(this.contractAddress, from);
         // send initialize tx
-        const receipt = await contract.methods.init_counter(start, end).send().wait();
+        const address = from.getCompleteAddress().address;
+        const receipt = await contract.methods.init_counter(start, end, address).send().wait();
         // ensure tx was mined
         if (receipt.status !== TxStatus.MINED) throw new Error(`Initialize tx status is ${receipt.status}`);
     }
@@ -107,7 +109,8 @@ export class StateChannelDriver {
         // connect wallet to contract
         const contract = await CounterStateChannelContract.at(this.contractAddress, from);
         // send increment tx
-        const receipt = await contract.methods.increment_single().send().wait();
+        const address = from.getCompleteAddress().address;
+        const receipt = await contract.methods.increment_single(address).send().wait();
         // ensure tx was mined
         if (receipt.status !== TxStatus.MINED) throw new Error(`Increment tx status is ${receipt.status}`);
     }
@@ -116,7 +119,8 @@ export class StateChannelDriver {
         // connect wallet to contract
         const contract = await CounterStateChannelContract.at(this.contractAddress, from);
         // send increment tx
-        const receipt = await contract.methods.increment_multiple().send().wait();
+        const address = from.getCompleteAddress().address;
+        const receipt = await contract.methods.increment_multiple(address).send().wait();
         // ensure tx was mined
         if (receipt.status !== TxStatus.MINED) throw new Error(`Increment tx status is ${receipt.status}`);
     }
@@ -127,21 +131,26 @@ export class StateChannelDriver {
      * @param from - the AztecWallet to get the count for
      * @return - the current count for the account
      */
-    async getCount(from: AztecWallet): Promise<FieldLike> {
+    async getCounter(from: AztecWallet): Promise<{
+        owner: FieldLike,
+        value: FieldLike,
+        end: FieldLike
+    }> {
         // connect wallet to contract
         const contract = await CounterStateChannelContract.at(this.contractAddress, from);
         // view increment balance
         const address = from.getCompleteAddress().address
-        const count = await contract.methods.get_counter(address).view();
+        const note = await contract.methods.get_counter(address).view();
         // return the count
-        return count;
+        return note;
     }
 
     async functionCall(from: AztecWallet): Promise<FunctionCall> {
         // connect wallet to contract
         const contract = await CounterStateChannelContract.at(this.contractAddress, from);
         // generate the execution request for the increment tx
-        const request = await contract.methods.increment_multiple().request();
+        const address = from.getCompleteAddress().address;
+        const request = await contract.methods.increment_multiple(address).request();
         return request;
     }
 
@@ -149,30 +158,34 @@ export class StateChannelDriver {
         // connect wallet to contract
         const contract = await CounterStateChannelContract.at(this.contractAddress, from);
         // generate the execution request for the increment tx
-        const request = await contract.methods.increment_multiple().create();
-        return request;
+        const address = from.getCompleteAddress().address;
+        const request = await contract.methods.increment_multiple(address).create();
+        const result = await from.simulate(request);
+        return result;
     }
 
     async getSimulationParameters(from: AztecWallet): Promise<ExecutionResult> {
         // connect wallet to contract
         const contract = await CounterStateChannelContract.at(this.contractAddress, from);
         // generate the execution request for the increment tx
-        const request = await contract.methods.increment_multiple().create();
+        const address = from.getCompleteAddress().address;
+        const request = await contract.methods.increment_multiple(address).create();
         // simulate the execution request
         const result = await this.pxe.getSimulationParameters(request);
         return result;
     }
 
-    async initProof(from: AztecWallet): Promise<KernelProof> {
+    async initProof(from: AztecWallet): Promise<KernelProofData> {
         // connect wallet to contract
         const contract = await CounterStateChannelContract.at(this.contractAddress, from);
         // generate execution request
-        const request = await contract.methods.increment_multiple().create();
-        console.log("Request", request);
+        const address = from.getCompleteAddress().address;
+        const request = await contract.methods.increment_multiple(address).create();
         // generate the first proof (init proof) for the state channel via kernel proving
         const kernelProof = await from.proveInit(request);
         return kernelProof;
     }
+
 
     // /**
     //  * Construct the private call data for an iteration of the kernel prover

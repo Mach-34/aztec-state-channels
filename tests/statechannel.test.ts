@@ -47,6 +47,13 @@ describe('State Channel', () => {
         logger("Initialized Test Environment")
     })
 
+    test("Initialize Counters", async () => {
+        // initialize alice
+        await driver.initializeCounter(accounts.alice, 0, 2);
+        // initialize bob
+        await driver.initializeCounter(accounts.bob, 0, 5);
+    })
+
     // test("Increment Counter", async () => {
     //     // initialize the counter
     //     await driver.initializeCounter(accounts.alice, 0, 10);
@@ -59,19 +66,18 @@ describe('State Channel', () => {
     //     await driver.incrementManual(accounts.alice);
     //     newCounter = await driver.getCount(accounts.alice);
     //     expect(newCounter).toEqual(2n);
-
     // });
 
-    test("Full increment", async () => {
-        // initialize the counter
-        await driver.initializeCounter(accounts.bob, 0, 4);
-        // increment the counter to end in one tx
-        const counter = await driver.getCount(accounts.bob);
-        expect(counter).toEqual(0n);
-        await driver.fullIncrementManual(accounts.bob);
-        // const newCounter = await driver.getCount(accounts.bob);
-        // expect(newCounter).toEqual(4n);
-    })
+    // test("Full increment", async () => {
+    //     // initialize the counter
+    //     await driver.initializeCounter(accounts.bob, 0, 4);
+    //     // increment the counter to end in one tx
+    //     const counter = await driver.getCount(accounts.bob);
+    //     expect(counter).toEqual(0n);
+    //     await driver.fullIncrementManual(accounts.bob);
+    //     // const newCounter = await driver.getCount(accounts.bob);
+    //     // expect(newCounter).toEqual(4n);
+    // })
 
     // test("Function Call", async () => {
     //     const req = await driver.functionCall(accounts.alice);
@@ -91,9 +97,14 @@ describe('State Channel', () => {
     //     console.log("Data: ", req);
     // })
 
-    // test("Get the init kernel proof", async () => {
-    //     const proof = await driver.initProof(accounts.alice);
-    //     console.log("Object keys: ", Object.keys(proof));
-    //     console.log("Data: ", proof);
+    // test("Get simulation result", async () => {
+    //     const result = await driver.simulate(accounts.alice);
+    //     console.log("result: ", result);
     // })
+
+    test("Get the init kernel proof", async () => {
+        const proof = await driver.initProof(accounts.alice);
+        console.log("Object keys: ", Object.keys(proof));
+        console.log("Data: ", proof);
+    })
 });

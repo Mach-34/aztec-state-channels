@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 RED='\033[0;31m'GREEN='\033[0;32m'
 GREEN='\033[0;32m'
@@ -9,11 +9,11 @@ NC='\033[0m' # No Color
 EXPECTED_PATH="$HOME/.aztec/bin/aztec-cli"
 ACTUAL_PATH=$(which aztec-cli)
 
-SANDBOX_CMD='SANDBOX_VERSION=0.16.7 /bin/bash -c "$(curl -fsSL 'https://sandbox.aztec.network')"'
+SANDBOX_CMD='SANDBOX_VERSION=0.16.9 /bin/bash -c "$(curl -fsSL 'https://sandbox.aztec.network')"'
 if [ "$ACTUAL_PATH" != "$EXPECTED_PATH" ]; then
-    echo "${RED}Failed to compile Aztec State Channel contracts:${NC} aztec-cli not found in path."
-    echo "First, make sure ${BLUE}@aztec/cli${NC} is not globally installed through npm or yarn."
-    echo "Then, run ${BLUE}${SANDBOX_CMD}${NC} to install the working version of the aztec-cli."
+    echo -e "${RED}Failed to compile Aztec State Channel contracts:${NC} aztec-cli not found in path."
+    echo -e "First, make sure ${BLUE}@aztec/cli${NC} is not globally installed through npm or yarn."
+    echo -e "Then, run ${BLUE}${SANDBOX_CMD}${NC} to install the working version of the aztec-cli."
     exit 1
 fi
 
@@ -25,7 +25,7 @@ if [ ! -d "./src/artifacts" ]; then
 fi
 
 # Create empty array to hold contract names
-contract_names=()
+CONTRACTS=()
 
 # Loop through each contract directory and compile
 for subdir in "$contracts_dir"/*/; do
@@ -41,7 +41,7 @@ for subdir in "$contracts_dir"/*/; do
         if [[ -n $ts_file ]]; then
             # Remove the file extension to get just the name
             name="${ts_file%.ts}"
-            contract_names+=("$name")
+            CONTRACTS+=("$name")
         fi
         # Change back to the original directory
         cd ../..
@@ -56,7 +56,7 @@ mv ./contracts/*/*.ts ./src/artifacts
 case "$OSTYPE" in
     darwin*)
         # macOS
-        for name in "${contract_names[@]}"; do
+        for name in "${CONTRACTS[@]}"; do
             sed -i '' \
                 "s|target/${name}.json|./${name}.json|" \
                 src/artifacts/${name}.ts
@@ -64,7 +64,7 @@ case "$OSTYPE" in
         ;;
     *)
         # Linux
-        for name in "${contract_names[@]}"; do
+        for name in "${CONTRACTS[@]}"; do
             sed -i \
                 "s|target/${name}.json|./${name}.json|" \
                 src/artifacts/${name}.ts
@@ -75,4 +75,4 @@ esac
 # Clean up build space
 rm -rf ./contracts/*/target
 
-echo "${BLUE}Successfully compiled Aztec State Channel contracts.${NC}"
+echo -e "${BLUE}Successfully compiled Aztec State Channel contracts.${NC}"
