@@ -1,5 +1,5 @@
 use dep::aztec::types::address::AztecAddress;
-use crate::types::game::Game;
+use crate::types::game::GameNote;
 
 global WINNING_PLACEMENTS = [
     [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -7,7 +7,7 @@ global WINNING_PLACEMENTS = [
     [0, 4, 8], [2, 4, 6]
 ];
 
-pub fn active_game(game: Game) {
+pub fn active_game(game: GameNote) {
     // Check that game does not have a winner
     assert(game.winner.address == 0);
     // Check that two players have joined a game;
@@ -16,7 +16,7 @@ pub fn active_game(game: Game) {
     assert(game.turn != 9);
 }
 
-pub fn can_play(game: Game, sender: Field) {
+pub fn can_play(game: GameNote, sender: Field) {
     // Check that player is in game
     assert((game.host.address == sender) | (game.player.address == sender));
 
