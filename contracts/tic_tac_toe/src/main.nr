@@ -2,7 +2,10 @@ mod types;
 mod utils;
 
 contract TicTacToe {
-    use dep::std::option::Option;
+    use dep::std::{
+        option::Option,
+        schnorr::verify_signature
+    };
     use dep::aztec::{
         context::Context,
         log::emit_encrypted_log,
@@ -42,7 +45,9 @@ contract TicTacToe {
             active_game, 
             can_play, 
             check_game_over,
-            check_winner, 
+            deserialize_move_signature,
+            encode_channel_msg,
+            encode_move_msg,
             legal_move,
             pop_capsule
         }
@@ -135,66 +140,119 @@ contract TicTacToe {
     *  Plays an entire game in one transaction and closes the
     */
     #[aztec(private)]
-    fn play_game(index: Field) {
-        let move = pop_capsule();
-        let games = storage.games.at(index).get_notes(NoteGetterOptions::new());
-        assert(games[0].is_some());
+    fn play_game(game_id: Field) {
+        let games = storage.games.at(game_id).get_notes(NoteGetterOptions::new());
+        // Check that game exists
+        assert(games[0].is_some(), "Game does not exist.");
         let mut game = games[0].unwrap_unchecked();
-        // Check legal move
-        legal_move(game.board, move[0] as u8, move[1] as u8);
+        // Check that game is active
+        active_game(game);
 
-        let coord = move[0] * 3 + move[1];
+        // Pop next move off of capsule
+        let turn = pop_capsule();
+        let row = turn[0] as u8;
+        let col = turn[1] as u8;
+        let sender = turn[2];
+        let move_signature = deserialize_move_signature(turn[3], turn[4], turn[5]);
+
+        // Check that move has been authorized by specified player
+        let move_msg = encode_move_msg(game_id, game.turn, row, col);
+        let sender_pubkey = get_public_key(sender);
+        let verified = verify_signature(
+            sender_pubkey.x, 
+            sender_pubkey.y,
+            move_signature,
+            move_msg
+        );
+        assert(verified, "Move signature could not be verified.");
+
+        // Check that player is in game and it is their turn
+        can_play(game, sender);
+
+        // Check legal move
+        legal_move(game.board, row, col);
+
+        let coord = row * 3 + col;
 
 
         // Remove note so we do not have duplicates
-        storage.games.at(index).remove(game);
+        storage.games.at(game_id).remove(game);
 
-        // Check whether player is host or not
-        if(move[2] == 0) {
+        // Check whether sender is host or not
+        if(sender == game.host.address) {
             game.board[coord] = 1;
         } else {
             game.board[coord] = 4;
         }
 
-        let game_over = check_game_over(game.board);
+        let game_over = check_game_over(game);
 
         if(game_over) {
             game.turn += 1;
-            game.winner = game.host;
-            storage.games.at(index).insert(&mut game, true);
+            // No winner assigned if draw
+            if(game.turn != 9) {
+                game.winner = AztecAddress::new(sender);
+            }
+            storage.games.at(game_id).insert(&mut game, true);
         } else {
             game.turn += 1;
-            storage.games.at(index).insert(&mut game, false);
+            storage.games.at(game_id).insert(&mut game, false);
             context.call_private_function(
                 context.this_address(),
                 compute_selector("play_game(Field)"),
-                [index]
+                [game_id]
             );
         }
     }
 
-    // TODO: Add signatures in place of passed in addresses
     #[aztec(private)]
-    fn open_channel(host: Field, player: Field, game_index: Field) {
+    fn open_channel(
+        host: Field, 
+        player: Field, 
+        host_signature: [u8; 64], 
+        player_signature: [u8; 64], 
+        game_id: Field
+    ) {
         // Initialize a new game with msg_sender as the host
-        // let current_game_index = storage.current_game.read();
+        // let return_vals = context.call_public_function(
+        //     context.this_address(),
+        //     compute_selector("current_game_index()"),
+        //     []
+        // );
+
+        let channel_msg = encode_channel_msg(host, player);
+
+        // Verify host and player have agreed to start a game
+        let hostPubkey = get_public_key(host);
+        let playerPubkey = get_public_key(player);
+
+        let hostVerified = verify_signature(hostPubkey.x, hostPubkey.y, host_signature, channel_msg);
+        let playerVerified = verify_signature(playerPubkey.x, playerPubkey.y, player_signature, channel_msg);
+        assert(hostVerified, "Host signature could not be verified");
+        assert(playerVerified, "Player signature could not be verified");
 
         // Initialize game
         let mut game = GameNote::new(AztecAddress::new(host), AztecAddress::new(player));
-        storage.games.at(game_index).insert(&mut game, true);
+        storage.games.at(game_id).insert(&mut game, true);
 
         // Increment active game index
-        // let new_game_index = current_game_index + 1;
-        // storage.current_game.write(new_game_index);
+        context.call_public_function(
+            context.this_address(),
+            compute_selector("increment_current_game_index()"),
+            []
+        );
     }
 
-    // #[aztec(public)]
-    // internal fn current_game_index()
+    #[aztec(public)]
+    internal fn current_game_index() -> Field {
+        storage.current_game.read()
+    }
 
-    // #[aztec(public)]
-    // internal fn update_current_game_index() {
-
-    // }
+    #[aztec(public)]
+    internal fn increment_current_game_index() {
+        let current_game_index = storage.current_game.read();
+        storage.current_game.write(current_game_index + 1);
+    }
 
 
     /* ===== Functions for testing ===== */
@@ -218,7 +276,7 @@ contract TicTacToe {
        }
     }
 
-    unconstrained fn current_game_index() -> Field {
+    unconstrained fn get_current_game_index() -> Field {
         storage.current_game.read()
     }
 
@@ -227,6 +285,26 @@ contract TicTacToe {
         games[0].unwrap_unchecked()
     }
 
+    unconstrained fn test_capsule() -> [Field; 6] {
+        pop_capsule()
+    }
+
+    unconstrained fn test_move_signature(
+        account: Field, 
+        game_index: Field,
+        turn: u8,
+        row: u8,
+        col: u8,
+        s_1: Field, 
+        s_2: Field, 
+        s_3: Field
+    ) -> bool {
+        let msg = encode_move_msg(game_index, turn, row, col);
+        let signature = deserialize_move_signature(s_1, s_2, s_3);
+        let pubkey = get_public_key(account);
+        verify_signature(pubkey.x, pubkey.y, signature, msg)
+    }
+    
     unconstrained fn compute_note_hash_and_nullifier(contract_address: Field, nonce: Field, storage_slot: Field, preimage: [Field; GAME_NOTE_LEN]) -> [Field; 4] {
         let note_header = NoteHeader::new(contract_address, nonce, storage_slot);
         note_utils::compute_note_hash_and_nullifier(GameNoteMethods, note_header, preimage)
