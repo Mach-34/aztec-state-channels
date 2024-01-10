@@ -11,22 +11,19 @@ global WINNING_PLACEMENTS = [
 pub fn active_game(game: GameNote) {
     // Check that game does not have a winner
     assert(game.winner.address == 0, "Game has concluded with winner.");
-    // Check that two players have joined a game;
-    // assert((game.host.address != 0) & (game.player.address != 0));
     // Check that game has not resulted in a draw. turns == max_turn (9)
     assert(game.turn != 9, "Game has concluded with draw.");
 }
 
 pub fn can_play(game: GameNote, sender: Field) {
-    assert((game.host.address == sender) | (game.player.address == sender), "Sender is not player or host.");
+    assert((game.host.address == sender) | (game.player.address == sender), "Sender is not challenger or host.");
 
     // Check that it is players turn. Event turn means it is host's turn. Odd is challenger
-    // let can_move = if game.host.address == sender {
-    //     game.turn % 2 == 0
-    // } else { 
-    //     game.turn % 2 == 1
-    // };
-    // assert(can_move, "Not player's turn.");
+     if(game.turn % 2 == 0) {
+        assert(sender == game.host.address, "Only host can move.");
+    } else {
+        assert(sender == game.player.address, "Only challenger can move.");
+    }
 }
 
 // Check whether endgame condition has been met for state channel

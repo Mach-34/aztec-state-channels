@@ -304,7 +304,7 @@ contract TicTacToe {
         let pubkey = get_public_key(account);
         verify_signature(pubkey.x, pubkey.y, signature, msg)
     }
-    
+
     unconstrained fn compute_note_hash_and_nullifier(contract_address: Field, nonce: Field, storage_slot: Field, preimage: [Field; GAME_NOTE_LEN]) -> [Field; 4] {
         let note_header = NoteHeader::new(contract_address, nonce, storage_slot);
         note_utils::compute_note_hash_and_nullifier(GameNoteMethods, note_header, preimage)
