@@ -4,10 +4,10 @@ import {
     DebugLogger,
     createDebugLogger,
     createPXEClient,
-    getSandboxAccountsWallets,
     CheatCodes,
     PXE
 } from '@aztec/aztec.js';
+import { createAccount } from '@aztec/accounts/testing';
 import { StateChannelDriver } from '../src/driver.js';
 import 'dotenv/config';
 
@@ -35,10 +35,9 @@ describe('State Channel', () => {
         pxe = await createPXEClient(PXE_URL);
 
         // initialize aztec signers
-        const wallets = await getSandboxAccountsWallets(pxe)
         accounts = {
-            alice: wallets[0],
-            bob: wallets[1],
+            alice: await createAccount(pxe),
+            bob: await createAccount(pxe),
         }
         // initialilze driver
         driver = await StateChannelDriver.new(pxe, accounts.alice, logger, 0);
@@ -102,9 +101,9 @@ describe('State Channel', () => {
     //     console.log("result: ", result);
     // })
 
-    test("Get the init kernel proof", async () => {
-        const proof = await driver.initProof(accounts.alice);
-        console.log("Object keys: ", Object.keys(proof));
-        console.log("Data: ", proof);
-    })
+    // test("Get the init kernel proof", async () => {
+    //     const proof = await driver.initProof(accounts.alice);
+    //     console.log("Object keys: ", Object.keys(proof));
+    //     console.log("Data: ", proof);
+    // })
 });

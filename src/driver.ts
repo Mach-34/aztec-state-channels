@@ -9,9 +9,8 @@ import {
     FunctionCall,
     TxExecutionRequest,
 } from '@aztec/aztec.js';
-import { KernelProofData } from '@aztec/types';
+import { KernelProofData, ExecutionResult } from '@aztec/circuit-types';
 import { CounterStateChannelContract } from './artifacts/CounterStateChannel.js';
-import { ExecutionResult } from '@aztec/types';
 // import { KernelProof } from './utils.js';
 
 /**
