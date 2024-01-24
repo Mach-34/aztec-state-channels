@@ -10,8 +10,8 @@ import {
     TxExecutionRequest,
 } from '@aztec/aztec.js';
 import { CounterStateChannelContract } from './artifacts/CounterStateChannel.js';
-import { ExecutionResult } from '@aztec/types';
-import { KernelProof } from './utils.js';
+import { KernelProofData, ExecutionResult } from '@aztec/circuit-types';
+// import { KernelProof } from './utils.js';
 
 /**
  * Deploy L2 Contract
@@ -163,7 +163,7 @@ export class StateChannelDriver {
         return result;
     }
 
-    async initProof(from: AztecWallet): Promise<KernelProof> {
+    async initProof(from: AztecWallet): Promise<KernelProofData> {
         // connect wallet to contract
         const contract = await CounterStateChannelContract.at(this.contractAddress, from);
         // generate execution request

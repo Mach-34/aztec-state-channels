@@ -115,8 +115,8 @@ export class TicTacToeContract extends ContractBase {
     /** get_timeout(hash: field) */
     get_timeout: ((hash: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
 
-    /** open_channel(host: field, challenger: field, host_signature: array, challenger_signature: array, game_id: field) */
-    open_channel: ((host: FieldLike, challenger: FieldLike, host_signature: (bigint | number)[], challenger_signature: (bigint | number)[], game_id: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
+    /** open_channel(host: field, challenger: field, host_signature: array, challenger_signature: array, shared_key: field, game_id: field) */
+    open_channel: ((host: FieldLike, challenger: FieldLike, host_signature: (bigint | number)[], challenger_signature: (bigint | number)[], shared_key: FieldLike, game_id: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
 
     /** play_game(game_id: field) */
     play_game: ((game_id: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;

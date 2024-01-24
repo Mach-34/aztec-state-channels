@@ -280,7 +280,8 @@ contract TicTacToe {
         host: Field, 
         challenger: Field, 
         host_signature: [u8; 64], 
-        challenger_signature: [u8; 64], 
+        challenger_signature: [u8; 64],
+        shared_key: Field,
         game_id: Field
     ) {
         // Verify host and challenger have agreed to start a game
