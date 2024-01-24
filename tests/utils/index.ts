@@ -5,6 +5,7 @@ type Move = {
     row: number,
     col: number,
     player: AccountWalletWithPrivateKey,
+    timeout?: boolean
 }
 
 export const deserializeMoveSignature = (s1: BigInt, s2: BigInt, s3: BigInt): Uint8Array => {
@@ -95,6 +96,7 @@ export const prepareMoves = (gameIndex: BigInt, moves: Move[]) => {
             s1,
             s2,
             s3,
+            Fr.fromString(numToHex(move.timeout ? 1 : 0))
         ];
     }).reverse();
 }

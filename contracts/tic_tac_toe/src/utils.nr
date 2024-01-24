@@ -1,6 +1,20 @@
-use dep::aztec::types::address::AztecAddress;
-use dep::std::option::Option;
-use crate::types::game::GameNote;
+use dep::aztec::{
+    oracle::get_public_key::get_public_key,
+    types::address::AztecAddress
+};
+use dep::std::{
+    option::Option,
+    schnorr::verify_signature
+};
+use crate::types::{
+    board::BoardNote,
+    game::GameNote,
+};
+
+global CAPSULE_SIZE = 7;
+
+// Ten minutes
+global TIMEOUT_WINDOW = 600;
 
 global WINNING_PLACEMENTS = [
     [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -8,36 +22,29 @@ global WINNING_PLACEMENTS = [
     [0, 4, 8], [2, 4, 6]
 ];
 
-pub fn active_game(game: GameNote) {
-    // Check that game does not have a winner
-    assert(game.winner.address == 0, "Game has concluded with winner.");
-    // Check that game has not resulted in a draw. turns == max_turn (9)
-    assert(game.turn != 9, "Game has concluded with draw.");
-}
+pub fn can_play(game: BoardNote, sender: Field) {
+    assert((game.host.address == sender) | (game.challenger.address == sender), "Sender is not challenger or host.");
 
-pub fn can_play(game: GameNote, sender: Field) {
-    assert((game.host.address == sender) | (game.player.address == sender), "Sender is not challenger or host.");
-
-    // Check that it is players turn. Event turn means it is host's turn. Odd is challenger
+    // Check that it is player's turn. Event turn means it is host's turn. Odd is challenger
      if(game.turn % 2 == 0) {
         assert(sender == game.host.address, "Only host can move.");
     } else {
-        assert(sender == game.player.address, "Only challenger can move.");
+        assert(sender == game.challenger.address, "Only challenger can move.");
     }
 }
 
 // Check whether endgame condition has been met for state channel
-pub fn check_game_over(game: GameNote) -> bool {
+pub fn check_game_over(board: BoardNote) -> bool {
     let winner = WINNING_PLACEMENTS.any(|placement: [Field; 3]| {
         let mut total = 0;  
         for i in 0..3 {
-            total += game.board[placement[i] as u8];
+            total += board.moves[placement[i] as u8];
         }
-        // Winning score is going to be 3 if host, 12 if player
+        // Winning score is going to be 3 if host, 12 if challenger
         (total == 3) | (total == 12)
     });
     // Return if there is a winner or a draw
-    winner | (game.turn + 1 == 9)
+    winner | (board.turn == 9)
 }
 
 pub fn deserialize_move_signature(s_1: Field, s_2: Field, s_3: Field) -> [u8; 64] {
@@ -59,13 +66,13 @@ pub fn deserialize_move_signature(s_1: Field, s_2: Field, s_3: Field) -> [u8; 64
 }
     
 
-pub fn encode_channel_msg(host: Field, player: Field) -> [u8; 64] {
+pub fn encode_channel_msg(host: Field, challenger: Field) -> [u8; 64] {
     let mut msg: [u8; 64] = [0; 64];
     let host_bytes = host.to_be_bytes(32);
-    let player_bytes = player.to_be_bytes(32);
+    let challenger_bytes = challenger.to_be_bytes(32);
     for i in 0..32 {
         msg[i] = host_bytes[i];
-        msg[i + 32] = player_bytes[i];
+        msg[i + 32] = challenger_bytes[i];
     }
     msg
 }
@@ -90,9 +97,26 @@ pub fn legal_move(board: [u8; 9], row: u8, col: u8) {
     assert(board[col + row * 3] == 0, "Coordinate is already occupied.");
 }
 
-#[oracle(popCapsule)]
-fn pop_capsule_oracle() -> [Field; 6] {}
+pub fn verify_game_start(
+    host: Field, 
+    challenger: Field, 
+    host_signature: [u8; 64],
+    challenger_signature: [u8; 64],
+) {
+    let channel_msg = encode_channel_msg(host, challenger);
 
-unconstrained pub fn pop_capsule() -> [Field; 6] {
+    let hostPubkey = get_public_key(host);
+    let challengerPubkey = get_public_key(challenger);
+
+    let hostVerified = verify_signature(hostPubkey.x, hostPubkey.y, host_signature, channel_msg);
+    let challengerVerified = verify_signature(challengerPubkey.x, challengerPubkey.y, challenger_signature, channel_msg);
+    assert(hostVerified, "Host signature could not be verified");
+    assert(challengerVerified, "Challenger signature could not be verified");
+}
+
+#[oracle(popCapsule)]
+fn pop_capsule_oracle() -> [Field; CAPSULE_SIZE] {}
+
+unconstrained pub fn pop_capsule() -> [Field; CAPSULE_SIZE] {
     pop_capsule_oracle()
 }

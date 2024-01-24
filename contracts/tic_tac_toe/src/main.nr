@@ -22,7 +22,6 @@ contract TicTacToe {
         state_vars::{
             map::Map,
             set::Set,
-            singleton::Singleton,
             public_state::PublicState
         },
         types::{
@@ -35,27 +34,45 @@ contract TicTacToe {
     };
     use crate::{
         types::{
+            board::{
+                BoardNote,
+                BoardNoteMethods,
+                BOARD_NOTE_LEN
+            },
             game::{
+                Game,
+                GameMethods,
                 GameNote, 
                 GameNoteMethods,
                 GAME_NOTE_LEN,
+                GAME_SERIALIZED_LEN
             },
+            // timeout::{
+            //     Timeout,
+            //     TimeoutMethods,
+            //     TIMEOUT_SERIALIZED_LEN,
+            //     TIMEOUT_WINDOW
+            // }
         },
         utils::{ 
-            active_game, 
             can_play, 
+            CAPSULE_SIZE,
             check_game_over,
             deserialize_move_signature,
-            encode_channel_msg,
             encode_move_msg,
             legal_move,
-            pop_capsule
+            pop_capsule,
+            verify_game_start,
+            TIMEOUT_WINDOW
         }
     };
 
     struct Storage {
         current_game: PublicState<Field, FIELD_SERIALIZED_LEN>,
-        games: Map<Set<GameNote, GAME_NOTE_LEN>>
+        games: Map<Set<GameNote, GAME_NOTE_LEN>>,
+        timeouts: Map<PublicState<Field, FIELD_SERIALIZED_LEN>>,
+        games_public: Map<PublicState<Game, GAME_SERIALIZED_LEN>>,
+        boards: Map<Set<BoardNote, BOARD_NOTE_LEN>>
     }
 
     impl Storage {
@@ -69,6 +86,27 @@ contract TicTacToe {
                         Set::new(context, slot, GameNoteMethods)
                     }
                 ),
+                timeouts: Map::new(
+                    context, 
+                    3, 
+                    |context, slot| {
+                        PublicState::new(context, slot, FieldSerializationMethods)
+                    }
+                ),
+                games_public: Map::new(
+                    context, 
+                    4, 
+                    |context, slot| {
+                        PublicState::new(context, slot, GameMethods)
+                    }
+                ),
+                boards: Map::new(
+                    context,
+                    5,
+                    |context, slot| {
+                        Set::new(context, slot, BoardNoteMethods)
+                    }
+                )
             }
         }
     }
@@ -76,77 +114,89 @@ contract TicTacToe {
     #[aztec(private)]
     fn constructor() {}
 
-    // #[aztec(public)]
-    // fn start_game() {
-    //     // Initialize a new game with msg_sender as the host
-    //     let game = Game {
-    //         host: AztecAddress::new(context.msg_sender()),
-    //         player: AztecAddress::new(0),
-    //         turn: 0,
-    //         winner: AztecAddress::new(0)
-    //     };
-    //     let current_game_index = storage.current_game.read();
-    //     storage.games.at(current_game_index).write(game);
+    #[aztec(private)]
+    fn claim_timeout_win(game_index: Field) {
+        // Load in board
+        let boards = storage.boards.at(game_index).get_notes(NoteGetterOptions::new());
+        assert(boards[0].is_some(), "Game does not exist.");
 
-    //     // Increment active game index
-    //     let new_game_index = current_game_index + 1;
-    //     storage.current_game.write(new_game_index);
-    // }
+        let mut board = boards[0].unwrap_unchecked();
 
-    // #[aztec(public)]
-    // fn join_game(index: Field) {
-    //     let mut game = storage.games.at(index).read();
-    //     game.player = AztecAddress::new(context.msg_sender());
-    //     storage.games.at(index).write(game);
-    // }
+        let note_hash = board.compute_note_hash();
 
-    // #[aztec(public)]
-    // fn turn(index: Field, row: u8, col: u8) {
-    //     let game = storage.games.at(index).read();
-    //     let is_host = game.host.address == context.msg_sender();
-    //     // Check that game is active
-    //     active_game(game);
-    //     // Check that sender can take turn in game
-    //     can_play(game, context.msg_sender());
-    //     // Check whether move is legal
-    //     let mut prev_board = storage.board.at(index).read();
-    //     legal_move(prev_board, row, col);
-    //     // Update moves
-    //     let coord = col + row * 3;
-    //     // If host, set 1 (X), if player set 4 (O) 
-    //     if(is_host) {
-    //         prev_board[coord] = 1;
-    //     } else {
-    //         prev_board[coord] = 4;
-    //     }
-    //     storage.board.at(index).write(prev_board);
+        storage.boards.at(game_index).remove(board);
+        board.over = true;
+        storage.boards.at(game_index).insert(&mut board, true);
+        
+        context.call_public_function(
+            context.this_address(),
+            compute_selector("claim_timeout_win_public(Field,Field,Field)"),
+            [game_index, note_hash, board.turn as Field]
+        );
+    }
 
+    #[aztec(private)]
+    fn dispute_timeout(game_id: Field, row: u8, col: u8) {
+        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        assert(boards[0].is_some(), "Game does not exist.");
+        let mut board = boards[0].unwrap_unchecked();
+        let sender = context.msg_sender();
+        let prev_note_hash = board.compute_note_hash();
 
-    //     // Check to see whether game has been won
-    //     let mut winner = AztecAddress::new(0);
-    //     if(check_winner(prev_board, is_host)) {
-    //         winner = AztecAddress::new(context.msg_sender());
-    //     }
-    //     // Update game
-    //     storage.games.at(index).write(Game {
-    //         host: game.host,
-    //         player: game.player,
-    //         turn: game.turn + 1,
-    //         winner
-    //     })
-    // }
+         // Check that player is in game and it is their turn
+        can_play(board, sender);
 
-    /*
-    *  Plays an entire game in one transaction and closes the
-    */
+        // Check legal move
+        legal_move(board.moves, row, col);
+
+        let coord = row * 3 + col;
+
+        // Remove note so we do not have duplicates
+        storage.boards.at(game_id).remove(board);
+
+        if(sender == board.host.address) {
+            board.moves[coord] = 1;
+        } else {
+            board.moves[coord] = 4;
+        }
+
+        let game_over = check_game_over(board);
+
+        context.call_public_function(
+            context.this_address(),
+            compute_selector("dispute_timeout_public(Field)"),
+            [prev_note_hash]
+        );
+
+        if(game_over) {
+            board.turn += 1;
+            board.over = true;
+            storage.boards.at(game_id).insert(&mut board, true);
+            let mut winner = 0;
+            // Check for draw
+            if(board.turn != 9) {
+                winner = sender;
+            }
+            // Assign winner for game publicly
+            context.call_public_function(
+                context.this_address(),
+                compute_selector("assign_winner(Field,(Field))"),
+                [game_id, winner]
+            );
+        } else {
+            board.turn += 1;
+            storage.boards.at(game_id).insert(&mut board, true);
+        }
+    }
+
     #[aztec(private)]
     fn play_game(game_id: Field) {
-        let games = storage.games.at(game_id).get_notes(NoteGetterOptions::new());
-        // Check that game exists
-        assert(games[0].is_some(), "Game does not exist.");
-        let mut game = games[0].unwrap_unchecked();
+        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        assert(boards[0].is_some(), "Game does not exist.");
+
+        let mut board = boards[0].unwrap_unchecked();
         // Check that game is active
-        active_game(game);
+        assert(!board.over, "Game has ended.");
 
         // Pop next move off of capsule
         let turn = pop_capsule();
@@ -154,9 +204,9 @@ contract TicTacToe {
         let col = turn[1] as u8;
         let sender = turn[2];
         let move_signature = deserialize_move_signature(turn[3], turn[4], turn[5]);
-
+        let timeout = turn[6] as bool;
         // Check that move has been authorized by specified player
-        let move_msg = encode_move_msg(game_id, game.turn, row, col);
+        let move_msg = encode_move_msg(game_id, board.turn, row, col);
         let sender_pubkey = get_public_key(sender);
         let verified = verify_signature(
             sender_pubkey.x, 
@@ -167,93 +217,153 @@ contract TicTacToe {
         assert(verified, "Move signature could not be verified.");
 
         // Check that player is in game and it is their turn
-        can_play(game, sender);
+        can_play(board, sender);
 
         // Check legal move
-        legal_move(game.board, row, col);
+        legal_move(board.moves, row, col);
 
         let coord = row * 3 + col;
 
 
         // Remove note so we do not have duplicates
-        storage.games.at(game_id).remove(game);
+        storage.boards.at(game_id).remove(board);
 
         // Check whether sender is host or not
-        if(sender == game.host.address) {
-            game.board[coord] = 1;
+        if(sender == board.host.address) {
+            board.moves[coord] = 1;
         } else {
-            game.board[coord] = 4;
+            board.moves[coord] = 4;
         }
 
-        let game_over = check_game_over(game);
+        board.turn += 1;
+        let game_over = check_game_over(board);
 
         if(game_over) {
-            game.turn += 1;
-            // No winner assigned if draw
-            if(game.turn != 9) {
-                game.winner = AztecAddress::new(sender);
+            // Update private board state to reflect end game.
+            board.over = true;
+            storage.boards.at(game_id).insert(&mut board, true);
+
+            let mut winner = 0;
+            // Check for draw
+            if(board.turn != 9) {
+                winner = sender;
             }
-            storage.games.at(game_id).insert(&mut game, true);
-        } else {
-            game.turn += 1;
-            storage.games.at(game_id).insert(&mut game, false);
-            context.call_private_function(
+            // Assign winner for game publicly
+            context.call_public_function(
                 context.this_address(),
-                compute_selector("play_game(Field)"),
-                [game_id]
+                compute_selector("assign_winner(Field,(Field))"),
+                [game_id, winner]
             );
+        } else {
+            if(timeout) {
+                storage.boards.at(game_id).insert(&mut board, true);
+                // Compute note hash to used for timeout mapping
+                let note_hash = board.compute_note_hash();
+                context.call_public_function(
+                    context.this_address(),
+                    compute_selector("trigger_timeout(Field)"),
+                    [note_hash]
+                );
+            } else {
+                storage.boards.at(game_id).insert(&mut board, false);
+                context.call_private_function(
+                    context.this_address(),
+                    compute_selector("play_game(Field)"),
+                    [game_id]
+                );
+            }
         }
     }
 
     #[aztec(private)]
     fn open_channel(
         host: Field, 
-        player: Field, 
+        challenger: Field, 
         host_signature: [u8; 64], 
-        player_signature: [u8; 64], 
+        challenger_signature: [u8; 64], 
         game_id: Field
     ) {
-        // Initialize a new game with msg_sender as the host
-        // let return_vals = context.call_public_function(
-        //     context.this_address(),
-        //     compute_selector("current_game_index()"),
-        //     []
-        // );
+        // Verify host and challenger have agreed to start a game
+        verify_game_start(host, challenger, host_signature, challenger_signature);
 
-        let channel_msg = encode_channel_msg(host, player);
+        // Create board note for game
+        let mut board = BoardNote::new(AztecAddress::new(challenger), AztecAddress::new(host));
+        storage.boards.at(game_id).insert(&mut board, true);
 
-        // Verify host and player have agreed to start a game
-        let hostPubkey = get_public_key(host);
-        let playerPubkey = get_public_key(player);
-
-        let hostVerified = verify_signature(hostPubkey.x, hostPubkey.y, host_signature, channel_msg);
-        let playerVerified = verify_signature(playerPubkey.x, playerPubkey.y, player_signature, channel_msg);
-        assert(hostVerified, "Host signature could not be verified");
-        assert(playerVerified, "Player signature could not be verified");
-
-        // Initialize game
-        let mut game = GameNote::new(AztecAddress::new(host), AztecAddress::new(player));
-        storage.games.at(game_id).insert(&mut game, true);
-
-        // Increment active game index
         context.call_public_function(
             context.this_address(),
-            compute_selector("increment_current_game_index()"),
-            []
+            compute_selector("start_game(Field,Field,Field)"),
+            [challenger, host, game_id]
         );
     }
 
     #[aztec(public)]
-    internal fn current_game_index() -> Field {
-        storage.current_game.read()
+    internal fn assign_winner(game_index: Field, winner: AztecAddress) {
+        let mut game = storage.games_public.at(game_index).read();
+        game.over = true;
+        game.winner = winner;
+        storage.games_public.at(game_index).write(game);
     }
 
     #[aztec(public)]
-    internal fn increment_current_game_index() {
-        let current_game_index = storage.current_game.read();
-        storage.current_game.write(current_game_index + 1);
+    internal fn claim_timeout_win_public(game_index: Field, hash: Field, turn: Field) {
+        let trigger_timestamp = storage.timeouts.at(hash).read() as u64; 
+        assert(trigger_timestamp!= 0, "Invactive timeout.");
+        assert(context.timestamp() as u64 >= trigger_timestamp + TIMEOUT_WINDOW, "Player can still dispute timeout.");
+
+        // Set timestamp for timeout to 0
+        storage.timeouts.at(hash).write(0);
+
+        let mut game = storage.games_public.at(game_index).read();
+        game.over = true;
+
+        // Winner is host
+        if(turn as u8 % 2 == 1) {
+            game.winner = game.host;
+        // Winner is challenger
+        } else {
+            game.winner = game.challenger;
+        }
+        storage.games_public.at(game_index).write(game);
     }
 
+    #[aztec(public)]
+    internal fn dispute_timeout_public(hash: Field) {
+        let trigger_timestamp = storage.timeouts.at(hash).read() as u64; 
+        assert(trigger_timestamp != 0, "Invactive timeout.");
+        assert(context.timestamp() as u64 < trigger_timestamp + TIMEOUT_WINDOW, "Timeout period has already elapsed.");
+        storage.timeouts.at(hash).write(0);
+    }
+
+    #[aztec(public)]
+    internal fn start_game(challenger: Field, host: Field, game_id: Field) {
+        // let current_game_index = storage.current_game.read();
+
+        // Create new game in storage
+        storage.games_public.at(game_id).write(Game {
+            challenger: AztecAddress::new(challenger),
+            host: AztecAddress::new(host),
+            over: false,
+            winner: AztecAddress::new(0)
+        });
+
+        // Update current game index
+        // storage.current_game.write(current_game_index + 1);
+    }
+
+    #[aztec(private)]
+    internal fn set_winner_from_timeout(game_id: Field, winner: Field) {
+        let mut game = storage.games.at(game_id).get_notes(NoteGetterOptions::new())[0].unwrap_unchecked();
+        // Remove note so we do not have duplicates
+        storage.games.at(game_id).remove(game);
+        game.winner = AztecAddress::new(winner);
+        storage.games.at(game_id).insert(&mut game, true);
+    }
+
+    #[aztec(public)]
+    internal fn trigger_timeout(note_hash: Field) {
+        storage.timeouts.at(note_hash).write(context.timestamp());
+    }
 
     /* ===== Functions for testing ===== */
 
@@ -267,25 +377,30 @@ contract TicTacToe {
         );
     }
 
-    #[aztec(private)]
-    fn test_note_removal_from_set() {
-       let games = storage.games.at(0).get_notes(NoteGetterOptions::new());
-       if(games[0].is_some()) {
-        let game = games[0].unwrap_unchecked();
-        storage.games.at(0).remove(game);
-       }
+    unconstrained fn get_board(index: Field) -> BoardNote {
+        let boards = storage.boards.at(index).view_notes(NoteViewerOptions::new());
+        boards[0].unwrap_unchecked()
     }
 
     unconstrained fn get_current_game_index() -> Field {
         storage.current_game.read()
     }
 
-    unconstrained fn get_game(index: Field) -> GameNote {
-        let games = storage.games.at(index).view_notes(NoteViewerOptions::new());
-        games[0].unwrap_unchecked()
+    unconstrained fn get_game(index: Field) -> Game {
+        storage.games_public.at(index).read()
     }
 
-    unconstrained fn test_capsule() -> [Field; 6] {
+    unconstrained fn get_game_note_hash(index: Field) -> Field {
+        let boards = storage.boards.at(index).view_notes(NoteViewerOptions::new());
+        let board = boards[0].unwrap_unchecked();
+        board.compute_note_hash()
+    }
+
+    unconstrained fn get_timeout(hash: Field) -> Field {
+        storage.timeouts.at(hash).read()
+    }
+
+    unconstrained fn test_capsule() -> [Field; CAPSULE_SIZE] {
         pop_capsule()
     }
 
@@ -305,8 +420,8 @@ contract TicTacToe {
         verify_signature(pubkey.x, pubkey.y, signature, msg)
     }
 
-    unconstrained fn compute_note_hash_and_nullifier(contract_address: Field, nonce: Field, storage_slot: Field, preimage: [Field; GAME_NOTE_LEN]) -> [Field; 4] {
+    unconstrained fn compute_note_hash_and_nullifier(contract_address: Field, nonce: Field, storage_slot: Field, preimage: [Field; BOARD_NOTE_LEN]) -> [Field; 4] {
         let note_header = NoteHeader::new(contract_address, nonce, storage_slot);
-        note_utils::compute_note_hash_and_nullifier(GameNoteMethods, note_header, preimage)
+        note_utils::compute_note_hash_and_nullifier(BoardNoteMethods, note_header, preimage)
     }
 }

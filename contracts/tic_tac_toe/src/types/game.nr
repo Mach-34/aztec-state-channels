@@ -12,11 +12,21 @@ use dep::aztec::{
         get_public_key::get_public_key
     },
     types::{
-        address::AztecAddress
+        address::AztecAddress,
+        type_serialization::TypeSerializationInterface
     }
 };
 
 global GAME_NOTE_LEN = 13;
+
+global GAME_SERIALIZED_LEN = 4;
+
+struct Game {
+    challenger: AztecAddress,
+    host: AztecAddress,
+    over: bool,
+    winner: AztecAddress
+}
 
 struct GameNote {
     board: [u8; 9],
@@ -95,11 +105,11 @@ impl GameNote {
     }
 }
 
-fn deserialize(serialized: [Field; GAME_NOTE_LEN]) -> GameNote {
+fn deserialize_note(serialized: [Field; GAME_NOTE_LEN]) -> GameNote {
     GameNote::deserialize(serialized)
 }
 
-fn serialize(note: GameNote) -> [Field; GAME_NOTE_LEN] {
+fn serialize_note(note: GameNote) -> [Field; GAME_NOTE_LEN] {
     note.serialize()
 }
 
@@ -124,11 +134,29 @@ fn broadcast(context: &mut PrivateContext, slot: Field, note: GameNote) {
 }
 
 global GameNoteMethods = NoteInterface {
-    deserialize,
-    serialize,
+    deserialize: deserialize_note,
+    serialize: serialize_note,
     compute_note_hash,
     compute_nullifier,
     get_header,
     set_header,
     broadcast
+};
+
+fn deserialize(serialized: [Field; GAME_SERIALIZED_LEN]) -> Game {
+    Game {
+        challenger: AztecAddress::new(serialized[0]),
+        host: AztecAddress::new(serialized[1]),
+        over: serialized[2] as bool,
+        winner: AztecAddress::new(serialized[3])
+    }
+}
+
+fn serialize(game: Game) -> [Field; GAME_SERIALIZED_LEN] {
+    [game.challenger.address, game.host.address, game.over as Field, game.winner.address]
+}
+
+global GameMethods = TypeSerializationInterface {
+    deserialize,
+    serialize
 };
