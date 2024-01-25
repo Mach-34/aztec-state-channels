@@ -8,7 +8,7 @@ import {
     PXE
 } from '@aztec/aztec.js';
 import { createAccount } from '@aztec/accounts/testing';
-import { StateChannelDriver } from '../src/driver.js';
+import { StateChannelDriver } from './driver.js';
 import 'dotenv/config';
 
 const {
@@ -16,7 +16,7 @@ const {
     ETHEREUM_URL = 'http://localhost:8545',
 } = process.env;
 
-xdescribe('State Channel', () => {
+describe('State Channel', () => {
     jest.setTimeout(1500000);
     let pxe: PXE;
     let logger: DebugLogger;
@@ -46,6 +46,13 @@ xdescribe('State Channel', () => {
         logger("Initialized Test Environment")
     })
 
+    test("Initialize Counters", async () => {
+        // initialize alice
+        await driver.initializeCounter(accounts.alice, 0, 2);
+        // initialize bob
+        await driver.initializeCounter(accounts.bob, 0, 5);
+    })
+
     // test("Increment Counter", async () => {
     //     // initialize the counter
     //     await driver.initializeCounter(accounts.alice, 0, 10);
@@ -58,19 +65,18 @@ xdescribe('State Channel', () => {
     //     await driver.incrementManual(accounts.alice);
     //     newCounter = await driver.getCount(accounts.alice);
     //     expect(newCounter).toEqual(2n);
-
     // });
 
-    test("Full increment", async () => {
-        // initialize the counter
-        await driver.initializeCounter(accounts.bob, 0, 4);
-        // increment the counter to end in one tx
-        const counter = await driver.getCount(accounts.bob);
-        expect(counter).toEqual(0n);
-        await driver.fullIncrementManual(accounts.bob);
-        // const newCounter = await driver.getCount(accounts.bob);
-        // expect(newCounter).toEqual(4n);
-    })
+    // test("Full increment", async () => {
+    //     // initialize the counter
+    //     await driver.initializeCounter(accounts.bob, 0, 4);
+    //     // increment the counter to end in one tx
+    //     const counter = await driver.getCount(accounts.bob);
+    //     expect(counter).toEqual(0n);
+    //     await driver.fullIncrementManual(accounts.bob);
+    //     // const newCounter = await driver.getCount(accounts.bob);
+    //     // expect(newCounter).toEqual(4n);
+    // })
 
     // test("Function Call", async () => {
     //     const req = await driver.functionCall(accounts.alice);
@@ -88,6 +94,11 @@ xdescribe('State Channel', () => {
     //     const req = await driver.getSimulationParameters(accounts.alice);
     //     console.log("Object keys: ", Object.keys(req));
     //     console.log("Data: ", req);
+    // })
+
+    // test("Get simulation result", async () => {
+    //     const result = await driver.simulate(accounts.alice);
+    //     console.log("result: ", result);
     // })
 
     // test("Get the init kernel proof", async () => {

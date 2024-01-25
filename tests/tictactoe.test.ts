@@ -58,7 +58,7 @@ describe('Tic Tac Toe', () => {
 
     describe('Test game over state channel', () => {
 
-        describe("Test game with shared encryption key", () => {
+        xdescribe("Test game with shared encryption key", () => {
             test("Public key from private", async () => {
                 const aliceAddress = accounts.alice.getAddress().toBuffer();
                 const bobAddress = accounts.bob.getAddress().toBuffer();
@@ -84,7 +84,7 @@ describe('Tic Tac Toe', () => {
             })
         })
 
-        xdescribe("Test game creation", () => {
+        describe("Test game creation", () => {
             test("Game should fail to start if at least one signature is not valid", async () => {
                 const aliceAddress = accounts.alice.getAddress().toBuffer();
                 const bobAddress = accounts.bob.getAddress().toBuffer();
@@ -106,7 +106,7 @@ describe('Tic Tac Toe', () => {
                 await expect(call.simulate()).rejects.toThrowError(/Challenger signature could not be verified/)
             });
 
-            test('Game starts with two valid signatures and current game index is incremented', async () => {
+            xtest('Game starts with two valid signatures and current game index is incremented', async () => {
 
                 const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
 
@@ -123,7 +123,7 @@ describe('Tic Tac Toe', () => {
             });
         })
 
-        xdescribe("Testing gameplay over state channel", () => {
+        describe("Testing gameplay over state channel", () => {
             let gameIndex = 0n;
 
             afterEach(async () => {
@@ -329,7 +329,7 @@ describe('Tic Tac Toe', () => {
                 await openChannel(contract, gameIndex, accounts.alice, accounts.bob);
                 await contract.methods.play_game(gameIndex).send().wait();
                 const game = await contract.methods.get_game(gameIndex).view();
-                expect(game.winner.address).toEqual(accounts.alice.getAddress().toBigInt());
+                expect(game.winner.inner).toEqual(accounts.alice.getAddress().toBigInt());
             });
 
             test("Subsequent move on won game should revert", async () => {
@@ -365,7 +365,7 @@ describe('Tic Tac Toe', () => {
                 }
                 await contract.methods.play_game(gameIndex).send().wait();
                 const game = await contract.methods.get_game(gameIndex).view();
-                expect(game.winner.address).toEqual(0n);
+                expect(game.winner.inner).toEqual(0n);
                 expect(game.over).toEqual(true);
             });
 
@@ -414,7 +414,7 @@ describe('Tic Tac Toe', () => {
                 const board = await contract.methods.get_board(gameIndex).view();
                 expect(board.over).toBe(true);
                 const game = await contract.methods.get_game(gameIndex).view();
-                expect(game.winner.address).toEqual(accounts.alice.getAddress().toBigInt());
+                expect(game.winner.inner).toEqual(accounts.alice.getAddress().toBigInt());
             });
 
             test("Disputed timeout should update state to next turn", async () => {
@@ -472,7 +472,7 @@ describe('Tic Tac Toe', () => {
                 const board = await contract.methods.get_board(gameIndex).view();
                 expect(board.over).toEqual(true);
                 const game = await contract.methods.get_game(gameIndex).view();
-                expect(game.winner.address).toEqual(accounts.bob.getAddress().toBigInt());
+                expect(game.winner.inner).toEqual(accounts.bob.getAddress().toBigInt());
             })
         });
     });

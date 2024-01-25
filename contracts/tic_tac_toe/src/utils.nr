@@ -1,6 +1,6 @@
 use dep::aztec::{
     oracle::get_public_key::get_public_key,
-    types::address::AztecAddress
+    protocol_types::address::AztecAddress,
 };
 use dep::std::{
     option::Option,
@@ -23,13 +23,13 @@ global WINNING_PLACEMENTS = [
 ];
 
 pub fn can_play(game: BoardNote, sender: Field) {
-    assert((game.host.address == sender) | (game.challenger.address == sender), "Sender is not challenger or host.");
+    assert((game.host.to_field() == sender) | (game.challenger.to_field() == sender), "Sender is not challenger or host.");
 
     // Check that it is player's turn. Event turn means it is host's turn. Odd is challenger
      if(game.turn % 2 == 0) {
-        assert(sender == game.host.address, "Only host can move.");
+        assert(sender == game.host.to_field(), "Only host can move.");
     } else {
-        assert(sender == game.challenger.address, "Only challenger can move.");
+        assert(sender == game.challenger.to_field(), "Only challenger can move.");
     }
 }
 
@@ -105,8 +105,8 @@ pub fn verify_game_start(
 ) {
     let channel_msg = encode_channel_msg(host, challenger);
 
-    let hostPubkey = get_public_key(host);
-    let challengerPubkey = get_public_key(challenger);
+    let hostPubkey = get_public_key(AztecAddress::from_field(host));
+    let challengerPubkey = get_public_key(AztecAddress::from_field(challenger));
 
     let hostVerified = verify_signature(hostPubkey.x, hostPubkey.y, host_signature, channel_msg);
     let challengerVerified = verify_signature(challengerPubkey.x, challengerPubkey.y, challenger_signature, channel_msg);

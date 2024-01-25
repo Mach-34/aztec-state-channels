@@ -34,13 +34,16 @@ for subdir in "$contracts_dir"/*/; do
         cd "$subdir"
 
         # Execute your commands in the subdirectory
-        aztec-cli compile . -ts . > /dev/null
+        aztec-nargo compile &> /dev/null
+        aztec-cli codegen ./target -o . --ts
 
         # Extract the name of the TypeScript file
         ts_file=$(ls *.ts)
         if [[ -n $ts_file ]]; then
             # Remove the file extension to get just the name
             name="${ts_file%.ts}"
+            # Rename JSON file to typescript file
+            mv ./target/*.json "./target/${name}.json"
             CONTRACTS+=("$name")
         fi
         # Change back to the original directory
@@ -58,7 +61,7 @@ case "$OSTYPE" in
         # macOS
         for name in "${CONTRACTS[@]}"; do
             sed -i '' \
-                "s|target/${name}.json|./${name}.json|" \
+                "s|target/[^/]*\.json|./${name}.json|" \
                 src/artifacts/${name}.ts
         done
         ;;
@@ -66,7 +69,7 @@ case "$OSTYPE" in
         # Linux
         for name in "${CONTRACTS[@]}"; do
             sed -i \
-                "s|target/${name}.json|./${name}.json|" \
+                "s|target/[^/]*\.json|./${name}.json|" \
                 src/artifacts/${name}.ts
         done
         ;;

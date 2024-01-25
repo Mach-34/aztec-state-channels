@@ -8,10 +8,10 @@ use dep::aztec::{
         utils::compute_note_hash_for_read_or_nullify
     },
     oracle::{
-        get_secret_key::get_secret_key,
-        get_public_key::get_public_key
+        get_public_key::get_public_key,
+        nullifier_key::get_nullifier_secret_key
     },
-    types::address::AztecAddress
+    protocol_types::address::AztecAddress,
 };
 
 global BOARD_NOTE_LEN = 13;
@@ -45,9 +45,9 @@ impl BoardNote {
         }
 
         BoardNote {
-            challenger: AztecAddress::new(serialized[9]),
+            challenger: AztecAddress::from_field(serialized[9]),
             header: NoteHeader::empty(),
-            host: AztecAddress::new(serialized[10]),
+            host: AztecAddress::from_field(serialized[10]),
             moves,
             over: serialized[11] as bool,
             turn: serialized[12] as u8
@@ -61,8 +61,8 @@ impl BoardNote {
             serialized[i] = note.moves[i] as Field;
         }
 
-        serialized[9] = note.challenger.address;
-        serialized[10] = note.host.address;
+        serialized[9] = note.challenger.to_field();
+        serialized[10] = note.host.to_field();
         serialized[11] = note.over as Field;
         serialized[12] = note.turn as Field;
         serialized
@@ -72,9 +72,19 @@ impl BoardNote {
         pedersen_hash(self.serialize(), 0)
     }
 
-    pub fn compute_nullifier(self) -> Field {
+    pub fn compute_nullifier(self, context: &mut PrivateContext) -> Field {
         let note_hash_for_nullify = compute_note_hash_for_read_or_nullify(BoardNoteMethods, self);
-        let secret = get_secret_key(self.host.address);
+        let secret = context.request_nullifier_secret_key(self.host);
+        pedersen_hash([
+            note_hash_for_nullify,
+            secret.low,
+            secret.high,
+        ], 0)
+    }
+
+    pub fn compute_nullifier_without_context(self) -> Field {
+        let note_hash_for_nullify = compute_note_hash_for_read_or_nullify(BoardNoteMethods, self);
+        let secret = get_nullifier_secret_key(self.host);
         pedersen_hash([
             note_hash_for_nullify,
             secret.low,
@@ -91,7 +101,7 @@ impl BoardNote {
             context,
             (*context).this_address(),
             slot,
-            get_public_key(self.host.address),
+            get_public_key(self.host),
             self.serialize()
         );
     }
@@ -109,8 +119,12 @@ fn compute_note_hash(note: BoardNote) -> Field {
     note.compute_note_hash()
 }
 
-fn compute_nullifier(note: BoardNote) -> Field {
-    note.compute_nullifier()
+fn compute_nullifier(note: BoardNote, context: &mut PrivateContext) -> Field {
+    note.compute_nullifier(context)
+}
+
+fn compute_nullifier_without_context(note: BoardNote) -> Field {
+    note.compute_nullifier_without_context()
 }
 
 fn get_header(note: BoardNote) -> NoteHeader {
@@ -130,6 +144,7 @@ global BoardNoteMethods = NoteInterface {
     serialize,
     compute_note_hash,
     compute_nullifier,
+    compute_nullifier_without_context,
     get_header,
     set_header,
     broadcast

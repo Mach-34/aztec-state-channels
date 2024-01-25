@@ -1,4 +1,4 @@
-import { ExecutionResult, ProofOutput, OutputNoteData } from "@aztec/types";
+// import { ExecutionResult, ProofOutput, OutputNoteData } from "@aztec/types";
 import { Point, VerificationKey } from "@aztec/circuits.js";
 import {
     Contract,
@@ -7,12 +7,12 @@ import {
 } from "@aztec/aztec.js";
 import { SchnorrSignature } from "@aztec/circuits.js/barretenberg";
 
-export type KernelProof = {
-    proof: ProofOutput,
-    verificationKey: VerificationKey,
-    outputNotes: OutputNoteData[],
-    executionResult: ExecutionResult,
-}
+// export type KernelProof = {
+//     proof: ProofOutput,
+//     verificationKey: VerificationKey,
+//     outputNotes: OutputNoteData[],
+//     executionResult: ExecutionResult,
+// }
 
 export const emptyCapsuleStack = async (contract: Contract) => {
     try {

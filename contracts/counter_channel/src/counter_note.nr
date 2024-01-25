@@ -1,4 +1,5 @@
 use dep::aztec::{
+    protocol_types::address::AztecAddress,
     note::{
         note_header::NoteHeader,
         note_interface::NoteInterface,
@@ -6,7 +7,7 @@ use dep::aztec::{
     },
     oracle::{
         rand::rand,
-        get_secret_key::get_secret_key,
+        nullifier_key::get_nullifier_secret_key,
         get_public_key::get_public_key,
     },
     log::emit_encrypted_log,
@@ -17,14 +18,14 @@ use dep::aztec::{
 global COUNTER_NOTE_LEN: Field = 3;
 
 struct CounterNote {
-    owner: Field,
+    owner: AztecAddress,
     value: Field,
     end: Field,
     header: NoteHeader,
 }
 
 impl CounterNote {
-    pub fn new(owner: Field, value: Field, end: Field) -> Self {
+    pub fn new(owner: AztecAddress, value: Field, end: Field) -> Self {
         CounterNote {
             owner,
             value,
@@ -34,12 +35,12 @@ impl CounterNote {
     }
 
     pub fn serialize(self) -> [Field; COUNTER_NOTE_LEN] {
-        [self.owner, self.value, self.end]
+        [self.owner.to_field(), self.value, self.end]
     }
 
     pub fn deserialize(serialized: [Field; COUNTER_NOTE_LEN]) -> Self {
         CounterNote {
-            owner: serialized[0],
+            owner: AztecAddress::from_field(serialized[0]),
             value: serialized[1],
             end: serialized[2],
             header: NoteHeader::empty()
@@ -50,9 +51,19 @@ impl CounterNote {
         pedersen_hash(self.serialize(), 0)
     }
 
-    pub fn compute_nullifier(self) -> Field {
+    pub fn compute_nullifier(self, context: &mut PrivateContext) -> Field {
         let note_hash_for_nullify = compute_note_hash_for_read_or_nullify(CounterNoteMethods, self);
-        let secret = get_secret_key(self.owner);
+        let secret = context.request_nullifier_secret_key(self.owner);
+        pedersen_hash([
+            note_hash_for_nullify,
+            secret.low,
+            secret.high
+        ], 0)
+    }
+
+    pub fn compute_nullifier_without_context(self) -> Field {
+        let note_hash_for_nullify = compute_note_hash_for_read_or_nullify(CounterNoteMethods, self);
+        let secret = get_nullifier_secret_key(self.owner);
         pedersen_hash([
             note_hash_for_nullify,
             secret.low,
@@ -75,7 +86,6 @@ impl CounterNote {
     }
 }
 
-
 fn deserialize(serialized: [Field; COUNTER_NOTE_LEN]) -> CounterNote {
     CounterNote::deserialize(serialized)
 }
@@ -88,8 +98,12 @@ fn compute_note_hash(note: CounterNote) -> Field {
     note.compute_note_hash()
 }
 
-fn compute_nullifier(note: CounterNote) -> Field {
-    note.compute_nullifier()
+fn compute_nullifier(note: CounterNote, context: &mut PrivateContext) -> Field {
+    note.compute_nullifier(context)
+}
+
+fn compute_nullifier_without_context(note: CounterNote) -> Field {
+    note.compute_nullifier_without_context()
 }
 
 fn get_header(note: CounterNote) -> NoteHeader {
@@ -109,6 +123,7 @@ global CounterNoteMethods = NoteInterface {
     serialize,
     compute_note_hash,
     compute_nullifier,
+    compute_nullifier_without_context,
     get_header,
     set_header,
     broadcast

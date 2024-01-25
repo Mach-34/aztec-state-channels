@@ -8,13 +8,11 @@ use dep::aztec::{
         utils::compute_note_hash_for_read_or_nullify
     },
     oracle::{
-        get_secret_key::get_secret_key,
-        get_public_key::get_public_key
+        get_public_key::get_public_key,
+        nullifier_key::get_nullifier_secret_key
     },
-    types::{
-        address::AztecAddress,
-        type_serialization::TypeSerializationInterface
-    }
+    protocol_types::address::AztecAddress,
+    types::type_serialization::TypeSerializationInterface
 };
 
 global GAME_NOTE_LEN = 13;
@@ -45,7 +43,7 @@ impl GameNote {
             host,
             player,
             turn: 0,
-            winner: AztecAddress::new(0)
+            winner: AztecAddress::from_field(0)
         }
     }
     
@@ -56,10 +54,10 @@ impl GameNote {
         }
         GameNote {
             board,
-            host: AztecAddress::new(serialized[9]),
-            player: AztecAddress::new(serialized[10]),
+            host: AztecAddress::from_field(serialized[9]),
+            player: AztecAddress::from_field(serialized[10]),
             turn: serialized[11] as u8,
-            winner: AztecAddress::new(serialized[12]),
+            winner: AztecAddress::from_field(serialized[12]),
             header: NoteHeader::empty()
         }
     }
@@ -69,10 +67,10 @@ impl GameNote {
         for i in 0..9 {
             serialized[i] = note.board[i] as Field;
         }
-        serialized[9] = note.host.address;
-        serialized[10] = note.player.address;
+        serialized[9] = note.host.to_field();
+        serialized[10] = note.player.to_field();
         serialized[11] = note.turn as Field;
-        serialized[12] = note.winner.address;
+        serialized[12] = note.winner.to_field();
         serialized
     }
 
@@ -80,9 +78,19 @@ impl GameNote {
         pedersen_hash(self.serialize(), 0)
     }
 
-    pub fn compute_nullifier(self) -> Field {
+    pub fn compute_nullifier(self, context: &mut PrivateContext) -> Field {
         let note_hash_for_nullify = compute_note_hash_for_read_or_nullify(GameNoteMethods, self);
-        let secret = get_secret_key(self.host.address);
+        let secret = context.request_nullifier_secret_key(self.host);
+        pedersen_hash([
+            note_hash_for_nullify,
+            secret.low,
+            secret.high,
+        ], 0)
+    }
+
+    pub fn compute_nullifier_without_context(self) -> Field {
+        let note_hash_for_nullify = compute_note_hash_for_read_or_nullify(GameNoteMethods, self);
+        let secret = get_nullifier_secret_key(self.host);
         pedersen_hash([
             note_hash_for_nullify,
             secret.low,
@@ -99,7 +107,7 @@ impl GameNote {
             context,
             (*context).this_address(),
             slot,
-            get_public_key(self.host.address),
+            get_public_key(self.host),
             self.serialize()
         );
     }
@@ -117,8 +125,12 @@ fn compute_note_hash(note: GameNote) -> Field {
     note.compute_note_hash()
 }
 
-fn compute_nullifier(note: GameNote) -> Field {
-    note.compute_nullifier()
+fn compute_nullifier(note: GameNote,  context: &mut PrivateContext) -> Field {
+    note.compute_nullifier(context)
+}
+
+fn compute_nullifier_without_context(note: GameNote) -> Field {
+    note.compute_nullifier_without_context()
 }
 
 fn get_header(note: GameNote) -> NoteHeader {
@@ -138,6 +150,7 @@ global GameNoteMethods = NoteInterface {
     serialize: serialize_note,
     compute_note_hash,
     compute_nullifier,
+    compute_nullifier_without_context,
     get_header,
     set_header,
     broadcast
@@ -145,15 +158,15 @@ global GameNoteMethods = NoteInterface {
 
 fn deserialize(serialized: [Field; GAME_SERIALIZED_LEN]) -> Game {
     Game {
-        challenger: AztecAddress::new(serialized[0]),
-        host: AztecAddress::new(serialized[1]),
+        challenger: AztecAddress::from_field(serialized[0]),
+        host: AztecAddress::from_field(serialized[1]),
         over: serialized[2] as bool,
-        winner: AztecAddress::new(serialized[3])
+        winner: AztecAddress::from_field(serialized[3])
     }
 }
 
 fn serialize(game: Game) -> [Field; GAME_SERIALIZED_LEN] {
-    [game.challenger.address, game.host.address, game.over as Field, game.winner.address]
+    [game.challenger.to_field(), game.host.to_field(), game.over as Field, game.winner.to_field()]
 }
 
 global GameMethods = TypeSerializationInterface {

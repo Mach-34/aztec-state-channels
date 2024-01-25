@@ -18,14 +18,16 @@ contract TicTacToe {
         oracle::{
             get_public_key::get_public_key
         },
-        selector::compute_selector,
+        protocol_types::{
+            address::AztecAddress,
+            abis::function_selector::FunctionSelector,
+        },
         state_vars::{
             map::Map,
             set::Set,
             public_state::PublicState
         },
         types::{
-            address::{AztecAddress},
             type_serialization::field_serialization::{
                 FieldSerializationMethods,
                 FIELD_SERIALIZED_LEN
@@ -69,10 +71,10 @@ contract TicTacToe {
 
     struct Storage {
         current_game: PublicState<Field, FIELD_SERIALIZED_LEN>,
-        games: Map<Set<GameNote, GAME_NOTE_LEN>>,
-        timeouts: Map<PublicState<Field, FIELD_SERIALIZED_LEN>>,
-        games_public: Map<PublicState<Game, GAME_SERIALIZED_LEN>>,
-        boards: Map<Set<BoardNote, BOARD_NOTE_LEN>>
+        games: Map<Field, Set<GameNote, GAME_NOTE_LEN>>,
+        timeouts: Map<Field, PublicState<Field, FIELD_SERIALIZED_LEN>>,
+        games_public: Map<Field, PublicState<Game, GAME_SERIALIZED_LEN>>,
+        boards: Map<Field, Set<BoardNote, BOARD_NOTE_LEN>>
     }
 
     impl Storage {
@@ -130,7 +132,7 @@ contract TicTacToe {
         
         context.call_public_function(
             context.this_address(),
-            compute_selector("claim_timeout_win_public(Field,Field,Field)"),
+            FunctionSelector::from_signature("claim_timeout_win_public(Field,Field,Field)"),
             [game_index, note_hash, board.turn as Field]
         );
     }
@@ -144,7 +146,7 @@ contract TicTacToe {
         let prev_note_hash = board.compute_note_hash();
 
          // Check that player is in game and it is their turn
-        can_play(board, sender);
+        can_play(board, sender.to_field());
 
         // Check legal move
         legal_move(board.moves, row, col);
@@ -154,7 +156,7 @@ contract TicTacToe {
         // Remove note so we do not have duplicates
         storage.boards.at(game_id).remove(board);
 
-        if(sender == board.host.address) {
+        if(sender == board.host) {
             board.moves[coord] = 1;
         } else {
             board.moves[coord] = 4;
@@ -164,7 +166,7 @@ contract TicTacToe {
 
         context.call_public_function(
             context.this_address(),
-            compute_selector("dispute_timeout_public(Field)"),
+            FunctionSelector::from_signature("dispute_timeout_public(Field)"),
             [prev_note_hash]
         );
 
@@ -175,12 +177,12 @@ contract TicTacToe {
             let mut winner = 0;
             // Check for draw
             if(board.turn != 9) {
-                winner = sender;
+                winner = sender.to_field();
             }
             // Assign winner for game publicly
             context.call_public_function(
                 context.this_address(),
-                compute_selector("assign_winner(Field,(Field))"),
+                FunctionSelector::from_signature("assign_winner(Field,(Field))"),
                 [game_id, winner]
             );
         } else {
@@ -207,7 +209,7 @@ contract TicTacToe {
         let timeout = turn[6] as bool;
         // Check that move has been authorized by specified player
         let move_msg = encode_move_msg(game_id, board.turn, row, col);
-        let sender_pubkey = get_public_key(sender);
+        let sender_pubkey = get_public_key(AztecAddress::from_field(sender));
         let verified = verify_signature(
             sender_pubkey.x, 
             sender_pubkey.y,
@@ -229,7 +231,7 @@ contract TicTacToe {
         storage.boards.at(game_id).remove(board);
 
         // Check whether sender is host or not
-        if(sender == board.host.address) {
+        if(sender == board.host.to_field()) {
             board.moves[coord] = 1;
         } else {
             board.moves[coord] = 4;
@@ -251,7 +253,7 @@ contract TicTacToe {
             // Assign winner for game publicly
             context.call_public_function(
                 context.this_address(),
-                compute_selector("assign_winner(Field,(Field))"),
+                FunctionSelector::from_signature("assign_winner(Field,(Field))"),
                 [game_id, winner]
             );
         } else {
@@ -261,14 +263,14 @@ contract TicTacToe {
                 let note_hash = board.compute_note_hash();
                 context.call_public_function(
                     context.this_address(),
-                    compute_selector("trigger_timeout(Field)"),
+                    FunctionSelector::from_signature("trigger_timeout(Field)"),
                     [note_hash]
                 );
             } else {
                 storage.boards.at(game_id).insert(&mut board, false);
                 context.call_private_function(
                     context.this_address(),
-                    compute_selector("play_game(Field)"),
+                    FunctionSelector::from_signature("play_game(Field)"),
                     [game_id]
                 );
             }
@@ -281,19 +283,18 @@ contract TicTacToe {
         challenger: Field, 
         host_signature: [u8; 64], 
         challenger_signature: [u8; 64],
-        shared_key: Field,
         game_id: Field
     ) {
         // Verify host and challenger have agreed to start a game
         verify_game_start(host, challenger, host_signature, challenger_signature);
 
         // Create board note for game
-        let mut board = BoardNote::new(AztecAddress::new(challenger), AztecAddress::new(host));
+        let mut board = BoardNote::new(AztecAddress::from_field(challenger), AztecAddress::from_field(host));
         storage.boards.at(game_id).insert(&mut board, true);
 
         context.call_public_function(
             context.this_address(),
-            compute_selector("start_game(Field,Field,Field)"),
+            FunctionSelector::from_signature("start_game(Field,Field,Field)"),
             [challenger, host, game_id]
         );
     }
@@ -342,10 +343,10 @@ contract TicTacToe {
 
         // Create new game in storage
         storage.games_public.at(game_id).write(Game {
-            challenger: AztecAddress::new(challenger),
-            host: AztecAddress::new(host),
+            challenger: AztecAddress::from_field(challenger),
+            host: AztecAddress::from_field(host),
             over: false,
-            winner: AztecAddress::new(0)
+            winner: AztecAddress::from_field(0)
         });
 
         // Update current game index
@@ -357,7 +358,7 @@ contract TicTacToe {
         let mut game = storage.games.at(game_id).get_notes(NoteGetterOptions::new())[0].unwrap_unchecked();
         // Remove note so we do not have duplicates
         storage.games.at(game_id).remove(game);
-        game.winner = AztecAddress::new(winner);
+        game.winner = AztecAddress::from_field(winner);
         storage.games.at(game_id).insert(&mut game, true);
     }
 
@@ -373,40 +374,40 @@ contract TicTacToe {
        pop_capsule();
        context.call_private_function(
             context.this_address(),
-            compute_selector("clear_capsule_stack()"),
+            FunctionSelector::from_signature("clear_capsule_stack()"),
             []
         );
     }
 
-    unconstrained fn get_board(index: Field) -> BoardNote {
+    unconstrained fn get_board(index: Field) -> pub BoardNote {
         let boards = storage.boards.at(index).view_notes(NoteViewerOptions::new());
         boards[0].unwrap_unchecked()
     }
 
-    unconstrained fn get_current_game_index() -> Field {
+    unconstrained fn get_current_game_index() -> pub Field {
         storage.current_game.read()
     }
 
-    unconstrained fn get_game(index: Field) -> Game {
+    unconstrained fn get_game(index: Field) -> pub Game {
         storage.games_public.at(index).read()
     }
 
-    unconstrained fn get_game_note_hash(index: Field) -> Field {
+    unconstrained fn get_game_note_hash(index: Field) -> pub Field {
         let boards = storage.boards.at(index).view_notes(NoteViewerOptions::new());
         let board = boards[0].unwrap_unchecked();
         board.compute_note_hash()
     }
 
-    unconstrained fn get_timeout(hash: Field) -> Field {
-        storage.timeouts.at(hash).read()
+    unconstrained fn get_timeout(hash: Field) -> pub Field {
+        storage.timeouts.at(hash).read() as Field
     }
 
-    unconstrained fn test_capsule() -> [Field; CAPSULE_SIZE] {
+    unconstrained fn test_capsule() -> pub [Field; CAPSULE_SIZE] {
         pop_capsule()
     }
 
     unconstrained fn test_move_signature(
-        account: Field, 
+        account: AztecAddress, 
         game_index: Field,
         turn: u8,
         row: u8,
@@ -414,14 +415,14 @@ contract TicTacToe {
         s_1: Field, 
         s_2: Field, 
         s_3: Field
-    ) -> bool {
+    ) -> pub bool {
         let msg = encode_move_msg(game_index, turn, row, col);
         let signature = deserialize_move_signature(s_1, s_2, s_3);
         let pubkey = get_public_key(account);
         verify_signature(pubkey.x, pubkey.y, signature, msg)
     }
 
-    unconstrained fn compute_note_hash_and_nullifier(contract_address: Field, nonce: Field, storage_slot: Field, preimage: [Field; BOARD_NOTE_LEN]) -> [Field; 4] {
+    unconstrained fn compute_note_hash_and_nullifier(contract_address: AztecAddress, nonce: Field, storage_slot: Field, preimage: [Field; BOARD_NOTE_LEN]) -> pub [Field; 4] {
         let note_header = NoteHeader::new(contract_address, nonce, storage_slot);
         note_utils::compute_note_hash_and_nullifier(BoardNoteMethods, note_header, preimage)
     }
