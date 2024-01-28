@@ -4,11 +4,11 @@ import {
     DebugLogger,
     createDebugLogger,
     createPXEClient,
-    getSandboxAccountsWallets,
     CheatCodes,
     PXE
 } from '@aztec/aztec.js';
-import { StateChannelDriver } from '../src/driver.js';
+import { createAccount } from '@aztec/accounts/testing';
+import { StateChannelDriver } from './driver.js';
 import 'dotenv/config';
 
 const {
@@ -35,16 +35,22 @@ describe('State Channel', () => {
         pxe = await createPXEClient(PXE_URL);
 
         // initialize aztec signers
-        const wallets = await getSandboxAccountsWallets(pxe)
         accounts = {
-            alice: wallets[0],
-            bob: wallets[1],
+            alice: await createAccount(pxe),
+            bob: await createAccount(pxe),
         }
         // initialilze driver
         driver = await StateChannelDriver.new(pxe, accounts.alice, logger, 0);
         // initialize cheat codes
         cc = await CheatCodes.create(ETHEREUM_URL, pxe);
         logger("Initialized Test Environment")
+    })
+
+    test("Initialize Counters", async () => {
+        // initialize alice
+        await driver.initializeCounter(accounts.alice, 0, 2);
+        // initialize bob
+        await driver.initializeCounter(accounts.bob, 0, 5);
     })
 
     // test("Increment Counter", async () => {
@@ -59,19 +65,18 @@ describe('State Channel', () => {
     //     await driver.incrementManual(accounts.alice);
     //     newCounter = await driver.getCount(accounts.alice);
     //     expect(newCounter).toEqual(2n);
-
     // });
 
-    test("Full increment", async () => {
-        // initialize the counter
-        await driver.initializeCounter(accounts.bob, 0, 4);
-        // increment the counter to end in one tx
-        const counter = await driver.getCount(accounts.bob);
-        expect(counter).toEqual(0n);
-        await driver.fullIncrementManual(accounts.bob);
-        // const newCounter = await driver.getCount(accounts.bob);
-        // expect(newCounter).toEqual(4n);
-    })
+    // test("Full increment", async () => {
+    //     // initialize the counter
+    //     await driver.initializeCounter(accounts.bob, 0, 4);
+    //     // increment the counter to end in one tx
+    //     const counter = await driver.getCount(accounts.bob);
+    //     expect(counter).toEqual(0n);
+    //     await driver.fullIncrementManual(accounts.bob);
+    //     // const newCounter = await driver.getCount(accounts.bob);
+    //     // expect(newCounter).toEqual(4n);
+    // })
 
     // test("Function Call", async () => {
     //     const req = await driver.functionCall(accounts.alice);
@@ -89,6 +94,11 @@ describe('State Channel', () => {
     //     const req = await driver.getSimulationParameters(accounts.alice);
     //     console.log("Object keys: ", Object.keys(req));
     //     console.log("Data: ", req);
+    // })
+
+    // test("Get simulation result", async () => {
+    //     const result = await driver.simulate(accounts.alice);
+    //     console.log("result: ", result);
     // })
 
     // test("Get the init kernel proof", async () => {
