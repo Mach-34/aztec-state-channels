@@ -1,4 +1,5 @@
 use dep::aztec::{
+    context::PrivateContext,
     oracle::get_public_key::get_public_key,
     protocol_types::address::AztecAddress,
 };
@@ -96,6 +97,28 @@ pub fn legal_move(board: [u8; 9], row: u8, col: u8) {
     // Coordinate must not be occupied
     assert(board[col + row * 3] == 0, "Coordinate is already occupied.");
 }
+
+// pub fn open_channel(
+//     context: &mut PrivateContext,
+//     host: Field, 
+//     challenger: Field, 
+//     host_signature: [u8; 64], 
+//     challenger_signature: [u8; 64],
+//     game_id: Field
+// ) {
+//     // Verify host and challenger have agreed to start a game
+//     verify_game_start(host, challenger, host_signature, challenger_signature);
+
+//     // Create board note for game
+//     let mut board = BoardNote::new(AztecAddress::from_field(challenger), AztecAddress::from_field(host));
+//     storage.boards.at(game_id).insert(&mut board, true);
+
+//     context.call_public_function(
+//         context.this_address(),
+//         FunctionSelector::from_signature("start_game(Field,Field,Field)"),
+//         [challenger, host, game_id]
+//     );
+// }
 
 pub fn verify_game_start(
     host: Field, 

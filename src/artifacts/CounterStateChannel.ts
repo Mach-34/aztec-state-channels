@@ -82,11 +82,11 @@ export class CounterStateChannelContract extends ContractBase {
   /** Type-safe wrappers for the public methods exposed by the contract. */
   public methods!: {
     
-    /** init_counter(start: field, end: field, owner: struct) */
-    init_counter: ((start: FieldLike, end: FieldLike, owner: AztecAddressLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
-
     /** increment_single(owner: struct) */
     increment_single: ((owner: AztecAddressLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
+
+    /** init_counter(start: field, end: field, owner: struct) */
+    init_counter: ((start: FieldLike, end: FieldLike, owner: AztecAddressLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
 
     /** increment_multiple(owner: struct) */
     increment_multiple: ((owner: AztecAddressLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
