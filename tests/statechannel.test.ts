@@ -9,7 +9,7 @@ import {
     TxStatus
 } from '@aztec/aztec.js';
 import { createAccount } from '@aztec/accounts/testing';
-import { StateChannelDriver } from '../src/driver.js';
+import { StateChannelDriver } from './driver.js';
 import 'dotenv/config';
 
 const {
@@ -47,6 +47,7 @@ describe('State Channel', () => {
         logger("Initialized Test Environment")
     })
 
+<<<<<<< HEAD:tests/statechannel.test.ts
     // test("Initialize Counters", async () => {
     //     // initialize alice
     //     await driver.initializeCounter(accounts.alice, 0, 2);
@@ -68,6 +69,14 @@ describe('State Channel', () => {
         let receipt = await accounts.alice.getTxReceipt(res);
         expect(receipt.status == TxStatus.MINED);
     });
+=======
+    test("Initialize Counters", async () => {
+        // initialize alice
+        await driver.initializeCounter(accounts.alice, 0, 2);
+        // initialize bob
+        await driver.initializeCounter(accounts.bob, 0, 5);
+    })
+>>>>>>> main:tests/statechannel.x.ts
 
     // test("Increment Counter", async () => {
     //     // initialize the counter
@@ -79,20 +88,33 @@ describe('State Channel', () => {
     //     let newCounter = await driver.getCounter(accounts.alice);
     //     expect(newCounter.value).toEqual(1n);
     //     await driver.incrementManual(accounts.alice);
+<<<<<<< HEAD:tests/statechannel.test.ts
     //     newCounter = await driver.getCounter(accounts.alice);
     //     expect(newCounter.value).toEqual(2n);
+=======
+    //     newCounter = await driver.getCount(accounts.alice);
+    //     expect(newCounter).toEqual(2n);
+>>>>>>> main:tests/statechannel.x.ts
     // });
 
     // test("Full increment", async () => {
     //     // initialize the counter
     //     await driver.initializeCounter(accounts.bob, 0, 4);
     //     // increment the counter to end in one tx
+<<<<<<< HEAD:tests/statechannel.test.ts
     //     const counter = await driver.getCounter(accounts.bob);
     //     console.log("Counter: ", counter);
     //     expect(counter.value).toEqual(0n);
     //     await driver.fullIncrementManual(accounts.bob);
     //     const newCounter = await driver.getCounter(accounts.bob);
     //     expect(newCounter.value).toEqual(4n);
+=======
+    //     const counter = await driver.getCount(accounts.bob);
+    //     expect(counter).toEqual(0n);
+    //     await driver.fullIncrementManual(accounts.bob);
+    //     // const newCounter = await driver.getCount(accounts.bob);
+    //     // expect(newCounter).toEqual(4n);
+>>>>>>> main:tests/statechannel.x.ts
     // })
 
     // test("Function Call", async () => {

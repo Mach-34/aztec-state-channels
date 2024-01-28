@@ -23,3 +23,11 @@ mv CounterStateChannel.ts ../../src/artifacts/CounterStateChannel.ts
 
 ## Clean up workspace
 rm -rf ./target
+
+cd ../tic_tac_toe
+aztec-nargo compile
+aztec-cli codegen ./target -o . --ts
+sed -i 's|target/tic_tac_toe-TicTacToe.json|./TicTacToe.json|' TicTacToe.ts
+mv ./target/tic_tac_toe-TicTacToe.json ../../src/artifacts/TicTacToe.json
+mv TicTacToe.ts ../../src/artifacts/TicTacToe.ts
+rm -rf ./target

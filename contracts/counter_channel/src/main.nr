@@ -95,7 +95,7 @@ contract CounterStateChannel {
         // get the singleton from storage
         let counter_singleton = storage.counters.at(from);
         // get the counter note from storage
-        let mut counter = counter_singleton.get_note(false);
+        let mut counter = counter_singleton.get_note(true);
 
         // increment value in note and replace in storage
         counter.value += 1;
