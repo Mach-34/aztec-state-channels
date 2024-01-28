@@ -5,7 +5,8 @@ import {
     createDebugLogger,
     createPXEClient,
     CheatCodes,
-    PXE
+    PXE,
+    TxStatus
 } from '@aztec/aztec.js';
 import { createAccount } from '@aztec/accounts/testing';
 import { StateChannelDriver } from '../src/driver.js';
@@ -46,36 +47,52 @@ describe('State Channel', () => {
         logger("Initialized Test Environment")
     })
 
-    test("Initialize Counters", async () => {
-        // initialize alice
-        await driver.initializeCounter(accounts.alice, 0, 2);
-        // initialize bob
-        await driver.initializeCounter(accounts.bob, 0, 5);
-    })
+    // test("Initialize Counters", async () => {
+    //     // initialize alice
+    //     await driver.initializeCounter(accounts.alice, 0, 2);
+    //     // initialize bob
+    //     // await driver.initializeCounter(accounts.bob, 0, 5);
+    // })
+
+    test("Simulate", async () => {
+        await driver.initializeCounter(accounts.alice, 0, 10);
+        // get tx execution request
+        let txExecutionRequest = await driver.getTxExecutionRequest(accounts.alice);
+        // simulate app circuit
+        let appCircuitResult = await driver.getAppCircuitRequest(accounts.alice, txExecutionRequest);
+        console.log("App Circuit Result: ", appCircuitResult.toJSON());
+        // construct transaction
+        let tx = await driver.getSimualtedTx(accounts.alice, txExecutionRequest, appCircuitResult);
+        // send tx
+        let res = await accounts.alice.sendTx(tx);
+        let receipt = await accounts.alice.getTxReceipt(res);
+        expect(receipt.status == TxStatus.MINED);
+    });
 
     // test("Increment Counter", async () => {
     //     // initialize the counter
     //     await driver.initializeCounter(accounts.alice, 0, 10);
     //     // increment the counter
-    //     const counter = await driver.getCount(accounts.alice);
-    //     expect(counter).toEqual(0n);
+    //     const counter = await driver.getCounter(accounts.alice);
+    //     expect(counter.value).toEqual(0n);
     //     await driver.incrementManual(accounts.alice);
-    //     let newCounter = await driver.getCount(accounts.alice);
-    //     expect(newCounter).toEqual(1n);
+    //     let newCounter = await driver.getCounter(accounts.alice);
+    //     expect(newCounter.value).toEqual(1n);
     //     await driver.incrementManual(accounts.alice);
-    //     newCounter = await driver.getCount(accounts.alice);
-    //     expect(newCounter).toEqual(2n);
+    //     newCounter = await driver.getCounter(accounts.alice);
+    //     expect(newCounter.value).toEqual(2n);
     // });
 
     // test("Full increment", async () => {
     //     // initialize the counter
     //     await driver.initializeCounter(accounts.bob, 0, 4);
     //     // increment the counter to end in one tx
-    //     const counter = await driver.getCount(accounts.bob);
-    //     expect(counter).toEqual(0n);
+    //     const counter = await driver.getCounter(accounts.bob);
+    //     console.log("Counter: ", counter);
+    //     expect(counter.value).toEqual(0n);
     //     await driver.fullIncrementManual(accounts.bob);
-    //     // const newCounter = await driver.getCount(accounts.bob);
-    //     // expect(newCounter).toEqual(4n);
+    //     const newCounter = await driver.getCounter(accounts.bob);
+    //     expect(newCounter.value).toEqual(4n);
     // })
 
     // test("Function Call", async () => {

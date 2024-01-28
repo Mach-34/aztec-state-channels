@@ -81,7 +81,7 @@ contract CounterStateChannel {
         );
         // increment value in note and replace in storage
         counter.value += 1;
-        counter_singleton.replace(&mut counter, true);
+        counter_singleton.replace(&mut counter, false);
         // @todo: publicly mark counter as complete if start == end
     }
 
@@ -90,24 +90,25 @@ contract CounterStateChannel {
      * @notice: DO NOT INCREMENT MORE THAN 64 TIMES (current call stack limit)
      */
     #[aztec(private)]
-    fn increment_multiple(owner: AztecAddress) {
+    fn increment_multiple(owner: Field) {
+        let from = AztecAddress::from_field(owner);
         // get the singleton from storage
-        let counter_singleton = storage.counters.at(owner);
+        let counter_singleton = storage.counters.at(from);
         // get the counter note from storage
-        let mut counter = counter_singleton.get_note(true);
+        let mut counter = counter_singleton.get_note(false);
 
         // increment value in note and replace in storage
         counter.value += 1;
         counter_singleton.replace(&mut counter, true);
 
         // if the counter has not reached its end value, increment again
-        if counter.value as u120 < counter.end as u120 {
-            context.call_private_function(
-                context.this_address(),
-                FunctionSelector::from_signature("increment_multiple(Field)"),
-                [owner.to_field()]
-            );
-        }
+        // if counter.value as u120 < counter.end as u120 {
+        //     context.call_private_function(
+        //         context.this_address(),
+        //         FunctionSelector::from_signature("increment_multiple(Field)"),
+        //         [owner]
+        //     );
+        // }
     }
 
     unconstrained fn get_counter(owner: AztecAddress) -> pub [Field; 3] {

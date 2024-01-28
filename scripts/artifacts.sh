@@ -8,7 +8,7 @@ AZTEC_CLI=$(pwd)/../aztec-packages/yarn-project/cli/dest/bin/index.js
 
 ## Compile Counter State Channel Contract
 cd ./contracts/counter_channel
-aztec-nargo compile &> /dev/null
+aztec-nargo compile
 
 ## Generate JSON ABI and TS Bindings
 aztec-cli codegen ./target -o . --ts
