@@ -1,4 +1,4 @@
-import { AccountWalletWithPrivateKey, Contract, Fr, GrumpkinPrivateKey, generatePublicKey } from "@aztec/aztec.js";
+import { AccountWalletWithPrivateKey, AztecAddress, CompleteAddress, Contract, Fr, GrumpkinPrivateKey, Point, generatePublicKey } from "@aztec/aztec.js";
 import { numToHex, signSchnorr, verifySchnorr } from "../../src/utils.js";
 
 type Move = {
@@ -7,6 +7,12 @@ type Move = {
     player: AccountWalletWithPrivateKey,
     timeout?: boolean
 }
+
+// export const generateCompleteAddress = (address: string): CompleteAddress => {
+//     const aztecAddress = AztecAddress.fromString(address);
+//     const publicKey = Point.fromString(address);
+//     const partialAddress = Fr.fromString('');
+// }
 
 export const deserializeMoveSignature = (s1: BigInt, s2: BigInt, s3: BigInt): Uint8Array => {
     const signature = new Uint8Array(64);
@@ -99,4 +105,25 @@ export const prepareMoves = (gameIndex: BigInt, moves: Move[]) => {
             Fr.fromString(numToHex(move.timeout ? 1 : 0))
         ];
     }).reverse();
+}
+
+export const prepareOrchestrator = (
+    alice: AccountWalletWithPrivateKey,
+    bob: AccountWalletWithPrivateKey
+) => {
+
+    const aliceAddress = alice.getAddress().toBuffer();
+    const bobAddress = bob.getAddress().toBuffer();
+
+    // Create open channel msg by concatenating host and player address bytes
+    const channelMsg = new Uint8Array(64);
+    channelMsg.set(Uint8Array.from(aliceAddress), 0);
+    channelMsg.set(Uint8Array.from(bobAddress), 32);
+
+    const alicePrivkey = alice.getEncryptionPrivateKey();
+    const aliceSignature = signSchnorr(channelMsg, alicePrivkey);
+
+    const bobPrivkey = bob.getEncryptionPrivateKey();
+    const bobSignature = signSchnorr(channelMsg, bobPrivkey);
+    return { aliceAddress, aliceSignature, bobAddress, bobSignature }
 }

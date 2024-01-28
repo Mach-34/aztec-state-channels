@@ -9,12 +9,11 @@ import {
     DebugLogger,
     Fr,
     PXE,
-    sleep
 } from '@aztec/aztec.js';
 import { createAccount } from '@aztec/accounts/testing';
 import { TicTacToeContractArtifact } from '../src/artifacts/TicTacToe.js';
 import { emptyCapsuleStack, numToHex, signSchnorr } from '../src/utils.js';
-import { genSerializedMoveSignature, openChannel, prepareMoves } from './utils/index.js';
+import { genSerializedMoveSignature, openChannel, prepareMoves, prepareOrchestrator } from './utils/index.js';
 
 const {
     ETH_RPC_URL = 'http://localhost:8545',
@@ -56,10 +55,21 @@ describe('Tic Tac Toe', () => {
         } catch (err) { }
     })
 
-    describe('Test game over state channel', () => {
+    describe('Test state channel over orchestrator function', () => {
+        let gameIndex = 0n;
 
-        xdescribe("Test game with shared encryption key", () => {
-            test("Public key from private", async () => {
+        describe('Test game creation', () => {
+            afterEach(async () => {
+                gameIndex++;
+            });
+
+            beforeEach(async () => {
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+                try {
+                    await emptyCapsuleStack(contract);
+                } catch (err) { }
+            })
+            test("Game should fail to start if at least one signature is not valid", async () => {
                 const aliceAddress = accounts.alice.getAddress().toBuffer();
                 const bobAddress = accounts.bob.getAddress().toBuffer();
 
@@ -71,18 +81,368 @@ describe('Tic Tac Toe', () => {
                 const alicePrivkey = accounts.alice.getEncryptionPrivateKey();
                 const aliceSignature = signSchnorr(channelMsg, alicePrivkey);
 
-                const bobPrivkey = accounts.charlie.getEncryptionPrivateKey();
-                const bobSignature = signSchnorr(channelMsg, bobPrivkey);
+                const charliePrivkey = accounts.charlie.getEncryptionPrivateKey();
+                const charlieSignature = signSchnorr(channelMsg, charliePrivkey);
 
-                const sharedAccount = await createAccount(pxe);
-                const sharedEncryptionKey = sharedAccount.getEncryptionPrivateKey();
-                console.log('Key: ', sharedEncryptionKey);
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
 
-                // const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+                const call = contract.methods.orchestrator(aliceAddress, bobAddress, aliceSignature, charlieSignature, gameIndex);
+                await expect(call.simulate()).rejects.toThrowError(/Challenger signature could not be verified/)
+            });
 
-                // const call = contract.methods.open_channel(aliceAddress, bobAddress, aliceSignature, bobSignature, 0n);
-            })
+            test("Transaction should fail when private key other than player's is used to sign move", async () => {
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+                // Create dummy move to pop capsule once
+                const prepared = prepareMoves(gameIndex, [{ row: 2, col: 0, player: accounts.alice }]);
+
+                const {
+                    aliceAddress,
+                    aliceSignature,
+                    bobAddress,
+                    bobSignature
+                } = prepareOrchestrator(accounts.alice, accounts.bob);
+
+                // Sign move as Charlie and replace with Alice's serialized signature
+                const charliePrivkey = accounts.charlie.getEncryptionPrivateKey();
+                const { s1, s2, s3 } = genSerializedMoveSignature(gameIndex, 1, 2, 0, charliePrivkey);
+
+                prepared[0][3] = s1;
+                prepared[0][4] = s2;
+                prepared[0][5] = s3;
+
+                await pxe.addCapsule(prepared[0]);
+
+                const call = contract.methods.orchestrator(aliceAddress, bobAddress, aliceSignature, bobSignature, gameIndex);
+                await expect(call.simulate()).rejects.toThrowError(/Move signature could not be verified./)
+            });
+
+            test("Transaction should fail when other coordinates than what were signed are provided", async () => {
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+                // Create dummy move to pop capsule once
+                const prepared = prepareMoves(gameIndex, [{ row: 2, col: 0, player: accounts.alice }]);
+
+                const {
+                    aliceAddress,
+                    aliceSignature,
+                    bobAddress,
+                    bobSignature
+                } = prepareOrchestrator(accounts.alice, accounts.bob);
+
+                prepared[0][0] = Fr.fromString(numToHex(1));
+                prepared[0][1] = Fr.fromString(numToHex(1));
+
+                await pxe.addCapsule(prepared[0]);
+
+                const call = contract.methods.orchestrator(aliceAddress, bobAddress, aliceSignature, bobSignature, gameIndex);
+                await expect(call.simulate()).rejects.toThrowError(/Move signature could not be verified./)
+            });
+
+            test("Moves should only be made by the registered host and player of the game", async () => {
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+
+                const {
+                    aliceAddress,
+                    aliceSignature,
+                    bobAddress,
+                    bobSignature
+                } = prepareOrchestrator(accounts.alice, accounts.bob);
+
+                const moves = [
+                    { row: 2, col: 0, player: accounts.alice },
+                    { row: 1, col: 0, player: accounts.bob },
+                    { row: 0, col: 0, player: accounts.alice },
+                    { row: 0, col: 1, player: accounts.bob },
+                    { row: 2, col: 2, player: accounts.charlie },
+                ];
+
+                const prepared = prepareMoves(gameIndex, moves);
+
+                for (const move of prepared) {
+                    await pxe.addCapsule(move);
+                }
+
+                const call = contract.methods.orchestrator(aliceAddress, bobAddress, aliceSignature, bobSignature, gameIndex);
+                await expect(call.simulate()).rejects.toThrowError(/Sender is not challenger or host./)
+            });
+
+            test("If a row index is out of bounds then the transaction should revert", async () => {
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+
+                const {
+                    aliceAddress,
+                    aliceSignature,
+                    bobAddress,
+                    bobSignature
+                } = prepareOrchestrator(accounts.alice, accounts.bob);
+
+                const moves = [
+                    { row: 2, col: 0, player: accounts.alice },
+                    { row: 4, col: 1, player: accounts.bob },
+                ];
+
+                const prepared = prepareMoves(gameIndex, moves);
+                for (const move of prepared) {
+                    await pxe.addCapsule(move);
+                }
+
+                const call = contract.methods.orchestrator(aliceAddress, bobAddress, aliceSignature, bobSignature, gameIndex);
+                await expect(call.simulate()).rejects.toThrowError(/Coordinate out of bounds./);
+            });
+
+            test("If a column index is out of bounds then the transaction should revert", async () => {
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+
+                const {
+                    aliceAddress,
+                    aliceSignature,
+                    bobAddress,
+                    bobSignature
+                } = prepareOrchestrator(accounts.alice, accounts.bob);
+
+                const moves = [
+                    { row: 2, col: 5, player: accounts.alice },
+                ];
+
+                const prepared = prepareMoves(gameIndex, moves);
+
+                for (const move of prepared) {
+                    await pxe.addCapsule(move);
+                }
+
+                const call = contract.methods.orchestrator(aliceAddress, bobAddress, aliceSignature, bobSignature, gameIndex);
+                await expect(call.simulate()).rejects.toThrowError(/Coordinate out of bounds./)
+            });
+
+            test("If a coordinate is already occupied then the transaction should revert", async () => {
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+
+                const {
+                    aliceAddress,
+                    aliceSignature,
+                    bobAddress,
+                    bobSignature
+                } = prepareOrchestrator(accounts.alice, accounts.bob);
+
+                const moves = [
+                    { row: 2, col: 2, player: accounts.alice },
+                    { row: 2, col: 2, player: accounts.bob },
+                ];
+
+                const prepared = prepareMoves(gameIndex, moves);
+
+                for (const move of prepared) {
+                    await pxe.addCapsule(move);
+                }
+
+                const call = contract.methods.orchestrator(aliceAddress, bobAddress, aliceSignature, bobSignature, gameIndex);
+                await expect(call.simulate()).rejects.toThrowError(/Coordinate is already occupied./);
+            });
+
+            test("Player should be unable to make two turns in a row", async () => {
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+
+                const {
+                    aliceAddress,
+                    aliceSignature,
+                    bobAddress,
+                    bobSignature
+                } = prepareOrchestrator(accounts.alice, accounts.bob);
+
+                const moves = [
+                    { row: 0, col: 0, player: accounts.alice },
+                    { row: 1, col: 1, player: accounts.bob },
+                    { row: 0, col: 1, player: accounts.alice },
+                    { row: 0, col: 2, player: accounts.alice },
+                ];
+
+                const prepared = prepareMoves(gameIndex, moves);
+
+                for (const move of prepared) {
+                    await pxe.addCapsule(move);
+                }
+
+                const call = contract.methods.orchestrator(aliceAddress, bobAddress, aliceSignature, bobSignature, gameIndex);
+                await expect(call.simulate()).rejects.toThrowError(/Only challenger can move./)
+            });
+
+            test("Reordered moves should cause signature verification to fail", async () => {
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+
+                const {
+                    aliceAddress,
+                    aliceSignature,
+                    bobAddress,
+                    bobSignature
+                } = prepareOrchestrator(accounts.alice, accounts.bob);
+
+                const moves = [
+                    { row: 0, col: 0, player: accounts.alice },
+                    { row: 1, col: 1, player: accounts.bob },
+                    { row: 0, col: 1, player: accounts.alice },
+                    { row: 2, col: 2, player: accounts.bob },
+                    { row: 0, col: 2, player: accounts.alice },
+                ];
+
+                const prepared = prepareMoves(gameIndex, moves);
+
+                // Switch Bob's first move with his second
+                const temp = prepared[3];
+                prepared[3] = prepared[1];
+                prepared[1] = temp;
+
+                for (const move of prepared) {
+                    await pxe.addCapsule(move);
+                }
+
+                const call = contract.methods.orchestrator(aliceAddress, bobAddress, aliceSignature, bobSignature, gameIndex);
+                await expect(call.simulate()).rejects.toThrowError(/Move signature could not be verified./)
+            });
+
+
+            test("Play a game until won", async () => {
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+
+                const {
+                    aliceAddress,
+                    aliceSignature,
+                    bobAddress,
+                    bobSignature
+                } = prepareOrchestrator(accounts.alice, accounts.bob);
+
+                const moves = [
+                    { row: 0, col: 0, player: accounts.alice },
+                    { row: 1, col: 1, player: accounts.bob },
+                    { row: 0, col: 1, player: accounts.alice },
+                    { row: 2, col: 2, player: accounts.bob },
+                    { row: 0, col: 2, player: accounts.alice },
+                ];
+                const prepared = prepareMoves(gameIndex, moves);
+                for (const move of prepared) {
+                    await pxe.addCapsule(move);
+                }
+                await contract.methods
+                    .orchestrator(aliceAddress, bobAddress, aliceSignature, bobSignature, gameIndex)
+                    .send()
+                    .wait();
+                const game = await contract.methods.get_game(gameIndex).view();
+                expect(game.winner.inner).toEqual(accounts.alice.getAddress().toBigInt());
+            });
+
+            xtest("Subsequent move on won game should revert", async () => {
+                gameIndex--;
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+
+                const {
+                    aliceAddress,
+                    aliceSignature,
+                    bobAddress,
+                    bobSignature
+                } = prepareOrchestrator(accounts.alice, accounts.bob);
+
+                const moves = [
+                    { row: 1, col: 2, player: accounts.bob },
+                ];
+
+                const prepared = prepareMoves(gameIndex, moves);
+
+                await pxe.addCapsule(prepared[0]);
+                const call = contract.methods.play_game(gameIndex);
+                await expect(call.simulate()).rejects.toThrowError(/Game has ended./);
+            });
+
+            test("Play game to draw", async () => {
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+
+                const {
+                    aliceAddress,
+                    aliceSignature,
+                    bobAddress,
+                    bobSignature
+                } = prepareOrchestrator(accounts.alice, accounts.bob);
+
+                const moves = [
+                    { row: 0, col: 0, player: accounts.alice },
+                    { row: 0, col: 1, player: accounts.bob },
+                    { row: 0, col: 2, player: accounts.alice },
+                    { row: 1, col: 1, player: accounts.bob },
+                    { row: 1, col: 0, player: accounts.alice },
+                    { row: 1, col: 2, player: accounts.bob },
+                    { row: 2, col: 1, player: accounts.alice },
+                    { row: 2, col: 0, player: accounts.bob },
+                    { row: 2, col: 2, player: accounts.alice },
+                ];
+                const prepared = prepareMoves(gameIndex, moves);
+                for (const move of prepared) {
+                    await pxe.addCapsule(move);
+                }
+                await contract.methods
+                    .orchestrator(aliceAddress, bobAddress, aliceSignature, bobSignature, gameIndex)
+                    .send()
+                    .wait();
+                const game = await contract.methods.get_game(gameIndex).view();
+                expect(game.winner.inner).toEqual(0n);
+                expect(game.over).toEqual(true);
+            });
+
+            xtest("Subsequent move on game with draw should revert", async () => {
+                gameIndex--;
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+                const moves = [
+                    { row: 2, col: 0, player: accounts.bob },
+
+                ];
+                const prepared = prepareMoves(gameIndex, moves);
+                await pxe.addCapsule(prepared[0]);
+                const call = contract.methods.play_game(gameIndex);
+                await expect(call.simulate()).rejects.toThrowError(/Game has ended./);
+            });
         })
+
+        describe("Testing gameplay over state channel", () => {
+
+            afterEach(async () => {
+                gameIndex++;
+            });
+
+            beforeEach(async () => {
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+                try {
+                    await emptyCapsuleStack(contract);
+                } catch (err) { }
+            })
+
+            xtest("Test transaction should fail when invalid game index has been provided", async () => {
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+                const call = contract.methods.play_game(1n);
+                await expect(call.simulate()).rejects.toThrowError(/Game does not exist./)
+            });
+
+            xtest("Transaction should fail when private key other than player's is used to sign move", async () => {
+                const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
+
+                // Create dummy move to pop capsule once
+                const prepared = prepareMoves(gameIndex, [{ row: 2, col: 0, player: accounts.alice }]);
+
+                await openChannel(contract, gameIndex, accounts.alice, accounts.bob);
+
+                // Sign move as Charlie and replace with Alice's serialized signature
+                const charliePrivkey = accounts.charlie.getEncryptionPrivateKey();
+                const { s1, s2, s3 } = genSerializedMoveSignature(gameIndex, 1, 2, 0, charliePrivkey);
+
+                prepared[0][3] = s1;
+                prepared[0][4] = s2;
+                prepared[0][5] = s3;
+
+                await pxe.addCapsule(prepared[0]);
+
+                const call = contract.methods.play_game(gameIndex);
+                await expect(call.simulate()).rejects.toThrowError(/Move signature could not be verified./)
+            });
+        });
+    });
+
+    xdescribe('Test game over state channel', () => {
+        let gameIndex = 0n;
 
         describe("Test game creation", () => {
             test("Game should fail to start if at least one signature is not valid", async () => {
@@ -102,7 +462,7 @@ describe('Tic Tac Toe', () => {
 
                 const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
 
-                const call = contract.methods.open_channel(aliceAddress, bobAddress, aliceSignature, charlieSignature, 0n);
+                const call = contract.methods.open_channel(aliceAddress, bobAddress, aliceSignature, charlieSignature, gameIndex);
                 await expect(call.simulate()).rejects.toThrowError(/Challenger signature could not be verified/)
             });
 
@@ -124,7 +484,6 @@ describe('Tic Tac Toe', () => {
         })
 
         describe("Testing gameplay over state channel", () => {
-            let gameIndex = 0n;
 
             afterEach(async () => {
                 gameIndex++;
@@ -137,7 +496,7 @@ describe('Tic Tac Toe', () => {
                 } catch (err) { }
             })
 
-            test("Test transaction should fail when invalid game index has been provided", async () => {
+            xtest("Test transaction should fail when invalid game index has been provided", async () => {
                 const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
                 const call = contract.methods.play_game(1n);
                 await expect(call.simulate()).rejects.toThrowError(/Game does not exist./)
@@ -382,8 +741,8 @@ describe('Tic Tac Toe', () => {
                 await expect(call.simulate()).rejects.toThrowError(/Game has ended./);
             });
         });
-        xdescribe("Test timout function", () => {
-            let gameIndex = 1n;
+
+        describe("Test timout function", () => {
             test("Trigger timeout and confirm it to be set at note hash", async () => {
                 const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
                 const moves = [
