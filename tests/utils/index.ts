@@ -45,15 +45,21 @@ export const genSerializedMoveSignature = (
     const moveMsg = genMoveMsg(gameIndex, turn, row, col);
 
     const signature = signSchnorr(moveMsg, privKey);
-    // Serialized signature to pass into the capsule. Signature is a Uint8Array of length 64
-    // and must be split into chunks less than 32 bytes in size to no exceed Field size
-    const s1 = Fr.fromBuffer(Buffer.from(signature.slice(0, 20)));
-    const s2 = Fr.fromBuffer(Buffer.from(signature.slice(20, 40)));
-    // 64 is not divisible by 3 so last slice will be be slightly larger
-    const s3 = Fr.fromBuffer(Buffer.from(signature.slice(40)));
 
-    return { s1, s2, s3 }
+    return serializeSignature(signature)
 }
+
+// export const genSerializedStartSignature = (
+//     turn: number,
+//     row: number,
+//     col: number,
+//     privKey: GrumpkinPrivateKey
+// ) => {
+//     // Message is formed by concatenating game index, move row, and move column together
+//     const moveMsg = genMoveMsg(gameIndex, turn, row, col);
+//     const signature = signSchnorr(moveMsg, privKey);
+//     return serializeSignature(signature)
+// }
 
 export const openChannel = async (
     contract: Contract,
@@ -91,10 +97,14 @@ export const playGame = async (gameId: BigInt, moves: Move[], host: Contract, pl
     }
 }
 
-export const prepareMoves = (gameIndex: BigInt, moves: Move[]) => {
+// export const prepareGameStart = (alice: account: 2) => {
+
+// }
+
+export const prepareMoves = (gameIndex: BigInt, moves: Move[], startIndex: number = 0) => {
     return moves.map((move, index) => {
         const privKey = move.player.getEncryptionPrivateKey();
-        const { s1, s2, s3 } = genSerializedMoveSignature(gameIndex, index, move.row, move.col, privKey);
+        const { s1, s2, s3 } = genSerializedMoveSignature(gameIndex, index + startIndex, move.row, move.col, privKey);
         return [
             Fr.fromString(numToHex(move.row)),
             Fr.fromString(numToHex(move.col)),
@@ -102,28 +112,51 @@ export const prepareMoves = (gameIndex: BigInt, moves: Move[]) => {
             s1,
             s2,
             s3,
-            Fr.fromString(numToHex(move.timeout ? 1 : 0))
+            Fr.fromString(numToHex(move.timeout ? 1 : 0)),
+            Fr.fromString(numToHex(0)), // Open channel capsule requires length 8 so pad extra value
         ];
     }).reverse();
 }
 
-export const prepareOrchestrator = (
+export const prepareOpenChannel = (
     alice: AccountWalletWithPrivateKey,
     bob: AccountWalletWithPrivateKey
 ) => {
 
-    const aliceAddress = alice.getAddress().toBuffer();
-    const bobAddress = bob.getAddress().toBuffer();
+    const aliceAddress = alice.getAddress();
+    const bobAddress = bob.getAddress();
 
     // Create open channel msg by concatenating host and player address bytes
     const channelMsg = new Uint8Array(64);
-    channelMsg.set(Uint8Array.from(aliceAddress), 0);
-    channelMsg.set(Uint8Array.from(bobAddress), 32);
+    channelMsg.set(Uint8Array.from(aliceAddress.toBuffer()), 0);
+    channelMsg.set(Uint8Array.from(bobAddress.toBuffer()), 32);
 
     const alicePrivkey = alice.getEncryptionPrivateKey();
     const aliceSignature = signSchnorr(channelMsg, alicePrivkey);
+    const { s1: alice_s1, s2: alice_s2, s3: alice_s3 } = serializeSignature(aliceSignature);
 
     const bobPrivkey = bob.getEncryptionPrivateKey();
     const bobSignature = signSchnorr(channelMsg, bobPrivkey);
-    return { aliceAddress, aliceSignature, bobAddress, bobSignature }
+    const { s1: bob_s1, s2: bob_s2, s3: bob_s3 } = serializeSignature(bobSignature);
+
+    return [
+        aliceAddress,
+        bobAddress,
+        alice_s1,
+        alice_s2,
+        alice_s3,
+        bob_s1,
+        bob_s2,
+        bob_s3
+    ]
+}
+
+export const serializeSignature = (signature: Uint8Array) => {
+    // Serialized signature to pass into the capsule. Signature is a Uint8Array of length 64
+    // and must be split into chunks less than 32 bytes in size to no exceed Field size
+    const s1 = Fr.fromBuffer(Buffer.from(signature.slice(0, 20)));
+    const s2 = Fr.fromBuffer(Buffer.from(signature.slice(20, 40)));
+    // 64 is not divisible by 3 so last slice will be be slightly larger
+    const s3 = Fr.fromBuffer(Buffer.from(signature.slice(40)));
+    return { s1, s2, s3 }
 }

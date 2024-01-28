@@ -1,7 +1,10 @@
 use dep::aztec::{
     context::PrivateContext,
     oracle::get_public_key::get_public_key,
-    protocol_types::address::AztecAddress,
+    protocol_types::{
+        abis::function_selector::FunctionSelector,
+        address::AztecAddress
+    }
 };
 use dep::std::{
     option::Option,
@@ -12,10 +15,9 @@ use crate::types::{
     game::GameNote,
 };
 
-global CAPSULE_SIZE = 7;
+global CAPSULE_SIZE = 8; // Set to length of largest possible capsule (open channel / game tart)
 
-// Ten minutes
-global TIMEOUT_WINDOW = 600;
+global TIMEOUT_WINDOW = 600; // Ten minutes
 
 global WINNING_PLACEMENTS = [
     [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -41,14 +43,12 @@ pub fn check_game_over(board: BoardNote) -> bool {
         for i in 0..3 {
             total += board.moves[placement[i] as u8];
         }
-        // Winning score is going to be 3 if host, 12 if challenger
-        (total == 3) | (total == 12)
+        (total == 3) | (total == 12) // Winning score is going to be 3 if host, 12 if challenger
     });
-    // Return if there is a winner or a draw
-    winner | (board.turn == 9)
+    winner | (board.turn == 9) // Return if there is a winner or a draw
 }
 
-pub fn deserialize_move_signature(s_1: Field, s_2: Field, s_3: Field) -> [u8; 64] {
+pub fn deserialize_signature(s_1: Field, s_2: Field, s_3: Field) -> [u8; 64] {
     let mut signature: [u8; 64] = [0; 64];
     let s_1_bytes = s_1.to_be_bytes(20);
     let s_2_bytes = s_2.to_be_bytes(20);
@@ -91,6 +91,31 @@ pub fn encode_move_msg(game_id: Field, turn: u8, row: u8, col: u8) -> [u8; 35] {
     msg
 }
 
+pub fn get_game_turn(game_id: Field, turn_index: u8) -> [Field; 4] {
+    let turn = pop_capsule();
+
+    let row = turn[0];
+    let col = turn[1];
+    let sender = turn[2];
+    let s1 = turn[3];
+    let s2 = turn[4];
+    let s3 = turn[5];
+    let timeout = turn[6];
+
+    let move_signature = deserialize_signature(s1, s2, s3);
+    // Check that move has been authorized by specified player
+    let move_msg = encode_move_msg(game_id, turn_index, row as u8, col as u8);
+    let sender_pubkey = get_public_key(AztecAddress::from_field(sender));
+    let verified = verify_signature(
+        sender_pubkey.x, 
+        sender_pubkey.y,
+        move_signature,
+        move_msg
+    );
+    assert(verified, "Move signature could not be verified.");
+    [row, col, sender, timeout]
+}
+
 pub fn legal_move(board: [u8; 9], row: u8, col: u8) {
     // Row and col must be less than 3
     assert((row < 3) & (col < 3), "Coordinate out of bounds.");
@@ -98,27 +123,31 @@ pub fn legal_move(board: [u8; 9], row: u8, col: u8) {
     assert(board[col + row * 3] == 0, "Coordinate is already occupied.");
 }
 
-// pub fn open_channel(
-//     context: &mut PrivateContext,
-//     host: Field, 
-//     challenger: Field, 
-//     host_signature: [u8; 64], 
-//     challenger_signature: [u8; 64],
-//     game_id: Field
-// ) {
-//     // Verify host and challenger have agreed to start a game
-//     verify_game_start(host, challenger, host_signature, challenger_signature);
+pub fn open_channel(game_id: Field, context: &mut PrivateContext) -> BoardNote {
+    let open_channel_params = pop_capsule();
 
-//     // Create board note for game
-//     let mut board = BoardNote::new(AztecAddress::from_field(challenger), AztecAddress::from_field(host));
-//     storage.boards.at(game_id).insert(&mut board, true);
+    let host = open_channel_params[0];
+    let challenger = open_channel_params[1];
+    let host_s1 = open_channel_params[2];
+    let host_s2 = open_channel_params[3];
+    let host_s3 = open_channel_params[4];
+    let challenger_s1 = open_channel_params[5];
+    let challenger_s2 = open_channel_params[6];
+    let challenger_s3 = open_channel_params[7];
 
-//     context.call_public_function(
-//         context.this_address(),
-//         FunctionSelector::from_signature("start_game(Field,Field,Field)"),
-//         [challenger, host, game_id]
-//     );
-// }
+    let host_signature = deserialize_signature(host_s1, host_s2, host_s3);
+    let challenger_signature = deserialize_signature(challenger_s1, challenger_s2, challenger_s3);
+
+    verify_game_start(host, challenger, host_signature, challenger_signature);
+
+    context.call_public_function(
+        context.this_address(),
+        FunctionSelector::from_signature("start_game(Field,Field,Field)"),
+        [challenger, host, game_id]
+    ); 
+
+    BoardNote::new(AztecAddress::from_field(challenger), AztecAddress::from_field(host))
+}
 
 pub fn verify_game_start(
     host: Field, 

@@ -49,21 +49,16 @@ contract TicTacToe {
                 GAME_NOTE_LEN,
                 GAME_SERIALIZED_LEN
             },
-            // timeout::{
-            //     Timeout,
-            //     TimeoutMethods,
-            //     TIMEOUT_SERIALIZED_LEN,
-            //     TIMEOUT_WINDOW
-            // }
         },
         utils::{ 
             can_play, 
             CAPSULE_SIZE,
             check_game_over,
-            deserialize_move_signature,
+            deserialize_signature,
             encode_move_msg,
             legal_move,
-            // open_channel,
+            get_game_turn,
+            open_channel,
             pop_capsule,
             verify_game_start,
             TIMEOUT_WINDOW
@@ -146,11 +141,8 @@ contract TicTacToe {
         let sender = context.msg_sender();
         let prev_note_hash = board.compute_note_hash();
 
-         // Check that player is in game and it is their turn
-        can_play(board, sender.to_field());
-
-        // Check legal move
-        legal_move(board.moves, row, col);
+        can_play(board, sender.to_field());  // Check that player is in game and it is their turn
+        legal_move(board.moves, row, col);   // Check legal move
 
         let coord = row * 3 + col;
 
@@ -193,170 +185,32 @@ contract TicTacToe {
     }
 
     #[aztec(private)]
-    fn play_game(game_id: Field) {
+    fn orchestrator(game_id: Field) {
+        let mut board = BoardNote::new(AztecAddress::from_field(0), AztecAddress::from_field(0));
         let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
-        assert(boards[0].is_some(), "Game does not exist.");
-
-        let mut board = boards[0].unwrap_unchecked();
-        // Check that game is active
-        assert(!board.over, "Game has ended.");
-
-        // Pop next move off of capsule
-        let turn = pop_capsule();
-        let row = turn[0] as u8;
-        let col = turn[1] as u8;
-        let sender = turn[2];
-        let move_signature = deserialize_move_signature(turn[3], turn[4], turn[5]);
-        let timeout = turn[6] as bool;
-        // Check that move has been authorized by specified player
-        let move_msg = encode_move_msg(game_id, board.turn, row, col);
-        let sender_pubkey = get_public_key(AztecAddress::from_field(sender));
-        let verified = verify_signature(
-            sender_pubkey.x, 
-            sender_pubkey.y,
-            move_signature,
-            move_msg
-        );
-        assert(verified, "Move signature could not be verified.");
-
-        // Check that player is in game and it is their turn
-        can_play(board, sender);
-
-        // Check legal move
-        legal_move(board.moves, row, col);
-
-        let coord = row * 3 + col;
-
-
-        // Remove note so we do not have duplicates
-        storage.boards.at(game_id).remove(board);
-
-        // Check whether sender is host or not
-        if(sender == board.host.to_field()) {
-            board.moves[coord] = 1;
-        } else {
-            board.moves[coord] = 4;
-        }
-
-        board.turn += 1;
-        let game_over = check_game_over(board);
-
-        if(game_over) {
-            // Update private board state to reflect end game.
-            board.over = true;
-            storage.boards.at(game_id).insert(&mut board, true);
-
-            let mut winner = 0;
-            // Check for draw
-            if(board.turn != 9) {
-                winner = sender;
-            }
-            // Assign winner for game publicly
-            context.call_public_function(
-                context.this_address(),
-                FunctionSelector::from_signature("assign_winner(Field,(Field))"),
-                [game_id, winner]
-            );
-        } else {
-            if(timeout) {
-                storage.boards.at(game_id).insert(&mut board, true);
-                // Compute note hash to used for timeout mapping
-                let note_hash = board.compute_note_hash();
-                context.call_public_function(
-                    context.this_address(),
-                    FunctionSelector::from_signature("trigger_timeout(Field)"),
-                    [note_hash]
-                );
-            } else {
-                storage.boards.at(game_id).insert(&mut board, false);
-                context.call_private_function(
-                    context.this_address(),
-                    FunctionSelector::from_signature("play_game(Field)"),
-                    [game_id]
-                );
-            }
-        }
-    }
-
-    // #[aztec(private)]
-    // fn open_channel(
-    //     host: Field, 
-    //     challenger: Field, 
-    //     host_signature: [u8; 64], 
-    //     challenger_signature: [u8; 64],
-    //     game_id: Field
-    // ) {
-    //     // Verify host and challenger have agreed to start a game
-    //     verify_game_start(host, challenger, host_signature, challenger_signature);
-
-    //     // Create board note for game
-    //     let mut board = BoardNote::new(AztecAddress::from_field(challenger), AztecAddress::from_field(host));
-    //     storage.boards.at(game_id).insert(&mut board, true);
-
-    //     context.call_public_function(
-    //         context.this_address(),
-    //         FunctionSelector::from_signature("start_game(Field,Field,Field)"),
-    //         [challenger, host, game_id]
-    //     );
-    // }
-
-    #[aztec(private)]
-    fn orchestrator(
-        host: Field, 
-        challenger: Field, 
-        host_signature: [u8; 64], 
-        challenger_signature: [u8; 64],
-        game_id: Field,
-    ) {
-
+        if(boards[0].is_some()) {
+            board = boards[0].unwrap_unchecked();
+            assert(!board.over, "Game has ended."); // If game is over then revert
         // #### Open channel ####
-        // open_channel(context, host, challenger, host_signature, challenger_signature, game_id);
-
-        verify_game_start(host, challenger, host_signature, challenger_signature);
-
-        // Create board note for game
-        let mut board = BoardNote::new(AztecAddress::from_field(challenger), AztecAddress::from_field(host));
-
-        context.call_public_function(
-            context.this_address(),
-            FunctionSelector::from_signature("start_game(Field,Field,Field)"),
-            [challenger, host, game_id]
-        );
+        } else {
+            board = open_channel(game_id, &mut context);   
+        }
 
         let mut game_over = false;
+        let mut timeout = false;
+
         // #### Play game ####
         for i in 0..9 {
-            if(!game_over) {
-                // let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
-                // assert(boards[0].is_some(), "Game does not exist.");
-
-                // let mut board = boards[0].unwrap_unchecked();
-                // Check that game is active
-                assert(!board.over, "Game has ended.");
-
+            if(!game_over & !timeout) {
                 // Pop next move off of capsule
-                let turn = pop_capsule();
+                let turn = get_game_turn(game_id, board.turn);
                 let row = turn[0] as u8;
                 let col = turn[1] as u8;
                 let sender = turn[2];
-                let move_signature = deserialize_move_signature(turn[3], turn[4], turn[5]);
-                let timeout = turn[6] as bool;
-                // Check that move has been authorized by specified player
-                let move_msg = encode_move_msg(game_id, board.turn, row, col);
-                let sender_pubkey = get_public_key(AztecAddress::from_field(sender));
-                let verified = verify_signature(
-                    sender_pubkey.x, 
-                    sender_pubkey.y,
-                    move_signature,
-                    move_msg
-                );
-                assert(verified, "Move signature could not be verified.");
+                timeout = turn[3] as bool;
 
-                // Check that player is in game and it is their turn
-                can_play(board, sender);
-
-                // Check legal move
-                legal_move(board.moves, row, col);
+                can_play(board, sender); // Check that player is in game and it is their turn
+                legal_move(board.moves, row, col); // Check legal move
 
                 let coord = row * 3 + col;
 
@@ -368,26 +222,34 @@ contract TicTacToe {
                 }
 
                 board.turn += 1;
-                game_over = check_game_over(board);
 
-                if(game_over) {
-                    // Update private board state to reflect end game.
-                    board.over = true;
-                    let mut winner = 0;
-                    // Check for draw
-                    if(board.turn != 9) {
-                        winner = sender;
-                    }
-                    // Assign winner for game publicly
+                if(timeout) {
+                    let note_hash = board.compute_note_hash();
                     context.call_public_function(
                         context.this_address(),
-                        FunctionSelector::from_signature("assign_winner(Field,(Field))"),
-                        [game_id, winner]
+                        FunctionSelector::from_signature("trigger_timeout(Field)"),
+                        [note_hash]
                     );
-                } 
-            } else {}
+                } else {
+                    game_over = check_game_over(board);
+                    if(game_over) {
+                        board.over = true; // Update private board state to reflect end game.
+                        let mut winner = 0;
+                        // Check for draw
+                        if(board.turn != 9) {
+                            winner = sender;
+                        }
+                        // Assign winner for game publicly
+                        context.call_public_function(
+                            context.this_address(),
+                            FunctionSelector::from_signature("assign_winner(Field,(Field))"),
+                            [game_id, winner]
+                        );
+                    } 
+                }
+            } else {} // Empty loop iteration
         }
-        storage.boards.at(game_id).insert(&mut board, true);
+        storage.boards.at(game_id).insert(&mut board, true); // Store updated board
     }
 
     #[aztec(public)]
@@ -508,7 +370,7 @@ contract TicTacToe {
         s_3: Field
     ) -> pub bool {
         let msg = encode_move_msg(game_index, turn, row, col);
-        let signature = deserialize_move_signature(s_1, s_2, s_3);
+        let signature = deserialize_signature(s_1, s_2, s_3);
         let pubkey = get_public_key(account);
         verify_signature(pubkey.x, pubkey.y, signature, msg)
     }
