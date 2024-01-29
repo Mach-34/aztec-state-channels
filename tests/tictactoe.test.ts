@@ -20,8 +20,9 @@ import {
   prepareOpenChannel,
   serializeSignature,
 } from "./utils/index.js";
-import { AppExecutionResult } from "@aztec/circuit-types";
+import { AppExecutionResult, NoteAndSlot } from "@aztec/circuit-types";
 import { FunctionSelector } from "@aztec/aztec.js";
+import { computeSiloedNullifierSecretKey } from "@aztec/circuits.js";
 const {
   ETH_RPC_URL = "http://localhost:8545",
   PXE_URL = "http://localhost:8080",
@@ -74,45 +75,46 @@ describe("Tic Tac Toe", () => {
   });
 
   describe("State Channel Test", () => {
-    test("State channel time", async () => {
-      // set game index
-      let gameIndex = 0n;
-      let stateChannel: StateChannel = {
-        open: undefined,
-        turns: [],
-      };
-      /// OPEN CHANNEL ///
-      // get contract as alice
-      let contract = await Contract.at(
-        contractAddress,
-        TicTacToeContractArtifact,
-        accounts.alice
-      );
-      await emptyCapsuleStack(contract);
-      // add channel open data to capsule stack
-      const openChannelCapsule = prepareOpenChannel(
-        accounts.alice,
-        accounts.bob
-      );
-      let functionSelector = FunctionSelector.fromSignature("open_channel(Field)")
-      await pxe.addCapsule(openChannelCapsule);
-      // build app execution request for channel open
-      let request = await contract.methods.open_channel(gameIndex).create();
-      console.log("Tx Request: ", request.authWitnesses[0]);
-      request = await contract.methods.open_channel(gameIndex).create();
-      console.log("Tx Request: ", request.authWitnesses[0]);
-      console.log("Selector: ", functionSelector.toString());
-      stateChannel.open = await accounts.alice.simulateAppCircuit(request);
+    xtest("State channel time", async () => {
+      // // set game index
+      // let gameIndex = 0n;
+      // let stateChannel: StateChannel = {
+      //   open: undefined,
+      //   turns: [],
+      // };
+      // /// OPEN CHANNEL ///
+      // // get contract as alice
+      // let contract = await Contract.at(
+      //   contractAddress,
+      //   TicTacToeContractArtifact,
+      //   accounts.alice
+      // );
+      // await emptyCapsuleStack(contract);
+      // // add channel open data to capsule stack
+      // const openChannelCapsule = prepareOpenChannel(
+      //   accounts.alice,
+      //   accounts.bob
+      // );
+      // let functionSelector = FunctionSelector.fromSignature(
+      //   "open_channel(Field)"
+      // );
+      // await pxe.addCapsule(openChannelCapsule);
+      // // build app execution request for channel open
+      // let request = await contract.methods.open_channel(gameIndex).create();
+      // console.log("Tx Request: ", request.authWitnesses[0]);
+      // request = await contract.methods.open_channel(gameIndex).create();
+      // console.log("Tx Request: ", request.authWitnesses[0]);
+      // console.log("Selector: ", functionSelector.toString());
+      // stateChannel.open = await accounts.alice.simulateAppCircuit(request);
 
-      console.log(
-        "open: ",
-        stateChannel.open.nestedExecutions[0].newNotes[0]
-      );
-      
-      console.log("Contract address: ", contractAddress);
-      console.log("bob address: ", accounts.bob.getCompleteAddress().address);
-      console.log("alice address: ", accounts.alice.getCompleteAddress().address);
+      // console.log("open: ", stateChannel.open.nestedExecutions[0].newNotes[0]);
 
+      // console.log("Contract address: ", contractAddress);
+      // console.log("bob address: ", accounts.bob.getCompleteAddress().address);
+      // console.log(
+      //   "alice address: ",
+      //   accounts.alice.getCompleteAddress().address
+      // );
 
       //   console.log("open: ", stateChannel.open.callStackItem.publicInputs.newCommitments);
       //   console.log("open: ", stateChannel.open.callStackItem.publicInputs.newNullifiers);
@@ -158,6 +160,108 @@ describe("Tic Tac Toe", () => {
       //   // build app execution request for turn
       //   request = await contract.methods.turn(gameIndex).create();
       //   stateChannel.turns.push(await accounts.alice.simulateAppCircuit(request));
+    });
+
+    test("State channel time", async () => {
+      // set game index
+      let gameIndex = 1n;
+      let stateChannel: StateChannel = {
+        open: undefined,
+        turns: [],
+      };
+      /// OPEN CHANNEL ///
+      // get contract as alice
+      let contract = await Contract.at(
+        contractAddress,
+        TicTacToeContractArtifact,
+        accounts.alice
+      );
+      await emptyCapsuleStack(contract);
+      // add channel open data to capsule stack
+      const openChannelCapsule = prepareOpenChannel(
+        accounts.alice,
+        accounts.bob
+      );
+      await pxe.addCapsule(openChannelCapsule);
+      // build app execution request for channel open
+      let request = await contract.methods.open_channel(gameIndex).create();
+      let executionNotes: NoteAndSlot[] = [];
+      let nullified: boolean[] = [];
+      let sideEffectCounter = 0;
+
+      stateChannel.open = await accounts.alice.simulateAppCircuit(
+        request.packedArguments[0],
+        FunctionSelector.fromSignature("open_channel(Field)"),
+        executionNotes,
+        nullified,
+        contractAddress,
+        sideEffectCounter
+      );
+      sideEffectCounter = Number(stateChannel.open.callStackItem.publicInputs.endSideEffectCounter.toBigInt());
+      executionNotes.push(...stateChannel.open.newNotes);
+      nullified = [false];
+
+      console.log("returned: ", stateChannel.open.newNotes.length);
+      console.log("Execution Notes: ", executionNotes.length);
+      console.log("Nullified: ", nullified.length);
+
+
+      /// TURN 1 ///
+      // add move to capsule
+      await emptyCapsuleStack(contract);
+      let move = [{ row: 0, col: 0, player: accounts.alice }];
+      let moveCapsule = prepareMoves(gameIndex, move)[0];
+      await pxe.addCapsule(moveCapsule);
+      // build app execution request for turn
+      request = await contract.methods.turn(gameIndex).create();
+      stateChannel.turns.push(await accounts.alice.simulateAppCircuit(
+        request.packedArguments[0],
+        FunctionSelector.fromSignature("turn(Field)"),
+        executionNotes,
+        nullified,
+        contractAddress,
+        sideEffectCounter
+      ));
+      sideEffectCounter = Number(stateChannel.turns[0].callStackItem.publicInputs.endSideEffectCounter.toBigInt());
+      executionNotes = stateChannel.turns[0].newNotes;
+      nullified = [true, false];
+
+      // console.log("returned: ", stateChannel.turns[0].newNotes.length);
+      // console.log("Execution Notes: ", executionNotes.length);
+      // console.log("Nullifier: ", nullified.length);
+
+      // for (let i = 0; i < executionNotes.length; i++) {
+      //   console.log(`Note #${i}: `, executionNotes[i].note);
+      // }
+
+      // console.log("Nullifier 0: ", stateChannel.turns[0].callStackItem.publicInputs.newNullifiers[0]);
+      // console.log("Nullifier 1: ", stateChannel.turns[0].callStackItem.publicInputs.newNullifiers[1]);
+
+
+      /// TURN 2 ///
+      // get contract as bob
+      contract = await Contract.at(
+        contractAddress,
+        TicTacToeContractArtifact,
+        accounts.bob
+      );
+      // add move to capsule
+      await emptyCapsuleStack(contract);
+      move = [{ row: 1, col: 1, player: accounts.bob }];
+      moveCapsule = prepareMoves(gameIndex, move, 1)[0];
+      await pxe.addCapsule(moveCapsule);
+      // build app execution request for turn
+      request = await contract.methods.turn(gameIndex).create();
+      stateChannel.turns.push(await accounts.bob.simulateAppCircuit(
+        request.packedArguments[0],
+        FunctionSelector.fromSignature("turn(Field)"),
+        executionNotes,
+        nullified,
+        contractAddress,
+        sideEffectCounter
+      ));
+
+      console.log("Returned notes: ", stateChannel.turns[0].newNotes);
     });
   });
 
