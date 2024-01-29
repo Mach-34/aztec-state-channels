@@ -100,7 +100,6 @@ contract CounterStateChannel {
         // increment value in note and replace in storage
         counter.value += 1;
         counter_singleton.replace(&mut counter, true);
-
         // if the counter has not reached its end value, increment again
         // if counter.value as u120 < counter.end as u120 {
         //     context.call_private_function(
