@@ -402,19 +402,19 @@ describe('Tic Tac Toe', () => {
 
                 await contract.methods.orchestrator(gameIndex).send().wait();
 
-                // const noteHash = await contract.methods.get_game_note_hash(gameIndex).view();
-                // const timestamp = await contract.methods.get_timeout(noteHash).view();
-                // expect(timestamp).not.toEqual(0n);
+                const noteHash = await contract.methods.get_game_note_hash(gameIndex).view();
+                const timestamp = await contract.methods.get_timeout(noteHash).view();
+                expect(timestamp).not.toEqual(0n);
             });
 
-            xtest("Transaction should revert if timestamp window has not concluded", async () => {
+            test("Transaction should revert if timestamp window has not concluded", async () => {
                 gameIndex--;
                 const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
                 const call = contract.methods.claim_timeout_win(gameIndex);
                 await expect(call.simulate()).rejects.toThrowError(/Player can still dispute timeout./);
             });
 
-            xtest("Alice should be able to claim game win now that timeout window has passed", async () => {
+            test("Alice should be able to claim game win now that timeout window has passed", async () => {
                 gameIndex--;
                 const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
                 const noteHash = await contract.methods.get_game_note_hash(gameIndex).view();
@@ -427,7 +427,7 @@ describe('Tic Tac Toe', () => {
                 expect(game.winner.inner).toEqual(accounts.alice.getAddress().toBigInt());
             });
 
-            xtest("Disputed timeout should update state to next turn", async () => {
+            test("Disputed timeout should update state to next turn", async () => {
                 const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
 
                 const openChannelCapsule = prepareOpenChannel(accounts.alice, accounts.bob);
@@ -456,14 +456,14 @@ describe('Tic Tac Toe', () => {
                 expect(board.turn).toEqual(5n);
             });
 
-            xtest("Win should not be claimmable after timeout is disputed", async () => {
+            test("Win should not be claimmable after timeout is disputed", async () => {
                 gameIndex--;
                 const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
                 const call = contract.methods.claim_timeout_win(gameIndex);
                 await expect(call.simulate()).rejects.toThrowError(/Invactive timeout./);
             });
 
-            xtest("Updated state in dispute timeout function should result in a game winner in some cases", async () => {
+            test("Updated state in dispute timeout function should result in a game winner in some cases", async () => {
                 const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
 
                 const openChannelCapsule = prepareOpenChannel(accounts.alice, accounts.bob);
@@ -492,7 +492,7 @@ describe('Tic Tac Toe', () => {
                 expect(game.winner.inner).toEqual(accounts.bob.getAddress().toBigInt());
             });
 
-            xtest("When timeout is disputed then game should be playable again to conclusion", async () => {
+            test("When timeout is disputed then game should be playable again to conclusion", async () => {
                 const contract = await Contract.at(contractAddress, TicTacToeContractArtifact, accounts.alice);
 
                 const openChannelCapsule = prepareOpenChannel(accounts.alice, accounts.bob);
@@ -533,11 +533,8 @@ describe('Tic Tac Toe', () => {
 
                 await contract.methods.orchestrator(gameIndex).send().wait();
 
-                // This isn't working for some reason
-
-                // const boardUpdated = await contract.methods.get_board(gameIndex).view();
-                // console.log('Board updated: ', boardUpdated);
-                // expect(boardUpdated.over).toEqual(true);
+                const boardUpdated = await contract.methods.get_board(gameIndex).view();
+                expect(boardUpdated.over).toEqual(true);
                 const gameUpdated = await contract.methods.get_game(gameIndex).view();
                 expect(gameUpdated.winner.inner).toEqual(accounts.bob.getAddress().toBigInt());
             });
