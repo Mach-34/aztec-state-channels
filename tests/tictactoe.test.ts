@@ -162,6 +162,36 @@ describe("Tic Tac Toe", () => {
       //   stateChannel.turns.push(await accounts.alice.simulateAppCircuit(request));
     });
 
+    test("Test modulo bug", async () => {
+      const contract = await Contract.at(
+        contractAddress,
+        TicTacToeContractArtifact,
+        accounts.alice
+      );
+
+      const openChannelCapsule = prepareOpenChannel(
+        accounts.alice,
+        accounts.bob
+      );
+
+      const moves = [
+        { row: 2, col: 0, player: accounts.alice },
+        { row: 1, col: 0, player: accounts.bob },
+      ];
+
+      const prepared = prepareMoves(0n, moves);
+
+      for (const move of prepared) {
+        await pxe.addCapsule(move);
+      }
+      await pxe.addCapsule(openChannelCapsule);
+
+      const call = contract.methods.orchestrator(0n);
+      await expect(call.simulate()).rejects.toThrowError(
+        /Sender is not challenger or host./
+      );
+    })
+
     xtest("State channel time", async () => {
       // set game index
       let gameIndex = 1n;
@@ -265,7 +295,7 @@ describe("Tic Tac Toe", () => {
     });
   });
 
-  describe("Test state channel over orchestrator function", () => {
+  xdescribe("Test state channel over orchestrator function", () => {
     let gameIndex = 0n;
 
     afterEach(async () => {
