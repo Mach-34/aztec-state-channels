@@ -53,13 +53,7 @@ impl CounterNote {
 
     pub fn compute_nullifier(self, context: &mut PrivateContext) -> Field {
         let note_hash_for_nullify = compute_note_hash_for_read_or_nullify(CounterNoteMethods, self);
-        let mut recipient = AztecAddress::from_field(0);
-        if self.turn % 2 == 0 {
-            recipient = self.host;
-        } else {
-            recipient = self.challenger;
-        }
-        let secret = context.request_nullifier_secret_key(recipient);
+        let secret = context.request_nullifier_secret_key(self.owner);
         pedersen_hash([
             note_hash_for_nullify,
             secret.low,
@@ -69,13 +63,7 @@ impl CounterNote {
 
     pub fn compute_nullifier_without_context(self) -> Field {
         let note_hash_for_nullify = compute_note_hash_for_read_or_nullify(CounterNoteMethods, self);
-        let mut recipient = AztecAddress::from_field(0);
-        if self.turn % 2 == 0 {
-            recipient = self.host;
-        } else {
-            recipient = self.challenger;
-        }
-        let secret = get_nullifier_secret_key(recipient);
+        let secret = get_nullifier_secret_key(self.owner);
         pedersen_hash([
             note_hash_for_nullify,
             secret.low,
@@ -88,17 +76,11 @@ impl CounterNote {
     }
 
     pub fn broadcast(self, context: &mut PrivateContext, slot: Field) {
-        let mut recipient = AztecAddress::from_field(0);
-        if self.turn % 2 == 0 {
-            recipient = self.host;
-        } else {
-            recipient = self.challenger;
-        }
         emit_encrypted_log(
             context,
             (*context).this_address(),
             slot,
-            get_public_key(recipient),
+            get_public_key(self.owner),
             self.serialize()
         );
     }

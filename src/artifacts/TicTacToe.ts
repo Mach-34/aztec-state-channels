@@ -82,29 +82,32 @@ export class TicTacToeContract extends ContractBase {
   /** Type-safe wrappers for the public methods exposed by the contract. */
   public methods!: {
     
+    /** claim_timeout_win(game_index: field) */
+    claim_timeout_win: ((game_index: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
+
     /** dispute_timeout(game_id: field, row: integer, col: integer) */
     dispute_timeout: ((game_id: FieldLike, row: (bigint | number), col: (bigint | number)) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
-
-    /** clear_capsule_stack() */
-    clear_capsule_stack: (() => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
-
-    /** get_current_game_index() */
-    get_current_game_index: (() => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
-
-    /** orchestrator(game_id: field) */
-    orchestrator: ((game_id: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
-
-    /** test_capsule() */
-    test_capsule: (() => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
 
     /** compute_note_hash_and_nullifier(contract_address: struct, nonce: field, storage_slot: field, preimage: array) */
     compute_note_hash_and_nullifier: ((contract_address: AztecAddressLike, nonce: FieldLike, storage_slot: FieldLike, preimage: FieldLike[]) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
 
-    /** claim_timeout_win(game_index: field) */
-    claim_timeout_win: ((game_index: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
-
     /** open_channel(game_id: field) */
     open_channel: ((game_id: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
+
+    /** orchestrator(game_id: field) */
+    orchestrator: ((game_id: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
+
+    /** get_current_game_index() */
+    get_current_game_index: (() => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
+
+    /** test_capsule() */
+    test_capsule: (() => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
+
+    /** clear_capsule_stack() */
+    clear_capsule_stack: (() => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
+
+    /** turn(game_id: field) */
+    turn: ((game_id: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
 
     /** get_board(index: field) */
     get_board: ((index: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
@@ -117,9 +120,6 @@ export class TicTacToeContract extends ContractBase {
 
     /** get_timeout(hash: field) */
     get_timeout: ((hash: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
-
-    /** turn(game_id: field) */
-    turn: ((game_id: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;
 
     /** test_move_signature(account: struct, game_index: field, turn: integer, row: integer, col: integer, s_1: field, s_2: field, s_3: field) */
     test_move_signature: ((account: AztecAddressLike, game_index: FieldLike, turn: (bigint | number), row: (bigint | number), col: (bigint | number), s_1: FieldLike, s_2: FieldLike, s_3: FieldLike) => ContractFunctionInteraction) & Pick<ContractMethod, 'selector'>;

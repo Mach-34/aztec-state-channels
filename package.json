@@ -8,7 +8,7 @@
     "yarn": "please-use-npm"
   },
   "scripts": {
-    "artifacts": "./scripts/artifacts.sh",
+    "artifacts": "./scripts/artifacts.sh.bak",
     "sandbox": "SANDBOX_VERSION=0.16.7 /bin/bash -c \"$(curl -fsSL 'https://sandbox.aztec.network')\"",
     "test": "NODE_NO_WARNINGS=1 node --experimental-vm-modules $(yarn bin jest) --no-cache --runInBand --verbose --config jest.integration.config.json"
   },

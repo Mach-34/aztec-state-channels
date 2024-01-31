@@ -111,9 +111,9 @@ impl BoardNote {
     pub fn broadcast(self, context: &mut PrivateContext, slot: Field) {
         let mut recipient = AztecAddress::from_field(0);
         if self.turn % 2 == 0 {
-            recipient = self.host;
-        } else {
             recipient = self.challenger;
+        } else {
+            recipient = self.host;
         };
         emit_encrypted_log(
             context,

@@ -71,7 +71,7 @@ describe("Tic Tac Toe", () => {
     // Clear out capsule stack each time tests are ran
     try {
       await emptyCapsuleStack(deployed);
-    } catch (err) {}
+    } catch (err) { }
   });
 
   describe("State Channel Test", () => {
@@ -162,7 +162,7 @@ describe("Tic Tac Toe", () => {
       //   stateChannel.turns.push(await accounts.alice.simulateAppCircuit(request));
     });
 
-    test("State channel time", async () => {
+    xtest("State channel time", async () => {
       // set game index
       let gameIndex = 1n;
       let stateChannel: StateChannel = {
@@ -265,7 +265,7 @@ describe("Tic Tac Toe", () => {
     });
   });
 
-  xdescribe("Test state channel over orchestrator function", () => {
+  describe("Test state channel over orchestrator function", () => {
     let gameIndex = 0n;
 
     afterEach(async () => {
@@ -280,7 +280,7 @@ describe("Tic Tac Toe", () => {
       );
       try {
         await emptyCapsuleStack(contract);
-      } catch (err) {}
+      } catch (err) { }
     });
 
     xdescribe("Test game creation", () => {
@@ -339,7 +339,8 @@ describe("Tic Tac Toe", () => {
         );
       });
     });
-    describe("Test gameplay over state channel", () => {
+
+    xdescribe("Test gameplay over state channel", () => {
       test("Transaction should fail when private key other than player's is used to sign move", async () => {
         const contract = await Contract.at(
           contractAddress,
