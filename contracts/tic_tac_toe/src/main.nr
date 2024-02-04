@@ -131,7 +131,6 @@ contract TicTacToe {
         storage.boards.at(game_index).remove(board);
         board.over = true;
         storage.boards.at(game_index).insert(&mut board, true);
-
         context.call_public_function(
             context.this_address(),
             FunctionSelector::from_signature("claim_timeout_win_public(Field,Field,Field)"),
@@ -360,6 +359,20 @@ contract TicTacToe {
         storage.timeouts.at(hash).write(0);
     }
 
+    #[aztec(private)]
+    internal fn set_winner_from_timeout(game_id: Field, winner: Field) {
+        let mut game = storage.games.at(game_id).get_notes(NoteGetterOptions::new())[0].unwrap_unchecked();
+        // Remove note so we do not have duplicates
+        storage.games.at(game_id).remove(game);
+        game.winner = AztecAddress::from_field(winner);
+        storage.games.at(game_id).insert(&mut game, true);
+    }
+
+    #[aztec(public)]
+    internal fn trigger_timeout(note_hash: Field) {
+        storage.timeouts.at(note_hash).write(context.timestamp());
+    }
+
     #[aztec(public)]
     internal fn start_game(challenger: Field, host: Field, game_id: Field) {
         // let current_game_index = storage.current_game.read();
@@ -377,19 +390,6 @@ contract TicTacToe {
         // storage.current_game.write(current_game_index + 1);
     }
 
-    #[aztec(private)]
-    internal fn set_winner_from_timeout(game_id: Field, winner: Field) {
-        let mut game = storage.games.at(game_id).get_notes(NoteGetterOptions::new())[0].unwrap_unchecked();
-        // Remove note so we do not have duplicates
-        storage.games.at(game_id).remove(game);
-        game.winner = AztecAddress::from_field(winner);
-        storage.games.at(game_id).insert(&mut game, true);
-    }
-
-    #[aztec(public)]
-    internal fn trigger_timeout(note_hash: Field) {
-        storage.timeouts.at(note_hash).write(context.timestamp());
-    }
 
     /* ===== Functions for testing ===== */
 
