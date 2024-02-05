@@ -2,14 +2,12 @@ import {
     AztecAddress,
     DebugLogger,
     FieldLike,
-    Fr,
     PXE,
     TxStatus,
     Wallet as AztecWallet,
-    FunctionCall,
     TxExecutionRequest,
 } from '@aztec/aztec.js';
-import { KernelProofData, ExecutionResult } from '@aztec/circuit-types';
+import { AppExecutionResult, Tx } from '@aztec/circuit-types';
 import { CounterStateChannelContract } from './artifacts/CounterStateChannel.js';
 // import { KernelProof } from './utils.js';
 
@@ -141,76 +139,28 @@ export class StateChannelDriver {
         const address = from.getCompleteAddress().address
         const note = await contract.methods.get_counter(address).view();
         // return the count
-        return note;
+        return {
+            owner: note[0],
+            value: note[1],
+            end: note[2]
+        };
     }
 
-    async functionCall(from: AztecWallet): Promise<FunctionCall> {
+    async getTxExecutionRequest(from: AztecWallet): Promise<TxExecutionRequest> {
         // connect wallet to contract
         const contract = await CounterStateChannelContract.at(this.contractAddress, from);
         // generate the execution request for the increment tx
         const address = from.getCompleteAddress().address;
-        const request = await contract.methods.increment_multiple(address).request();
+        const request = await contract.methods.increment_single(address).create();
         return request;
     }
 
-    async simulate(from: AztecWallet): Promise<TxExecutionRequest> {
-        // connect wallet to contract
-        const contract = await CounterStateChannelContract.at(this.contractAddress, from);
-        // generate the execution request for the increment tx
-        const address = from.getCompleteAddress().address;
-        const request = await contract.methods.increment_multiple(address).create();
-        const result = await from.simulate(request);
-        return result;
-    }
-
-    async getSimulationParameters(from: AztecWallet): Promise<ExecutionResult> {
-        // connect wallet to contract
-        const contract = await CounterStateChannelContract.at(this.contractAddress, from);
-        // generate the execution request for the increment tx
-        const address = from.getCompleteAddress().address;
-        const request = await contract.methods.increment_multiple(address).create();
-        // simulate the execution request
-        const result = await this.pxe.getSimulationParameters(request);
-        return result;
-    }
-
-    async initProof(from: AztecWallet): Promise<KernelProofData> {
-        // connect wallet to contract
-        const contract = await CounterStateChannelContract.at(this.contractAddress, from);
-        // generate execution request
-        const address = from.getCompleteAddress().address;
-        const request = await contract.methods.increment_multiple(address).create();
-        // generate the first proof (init proof) for the state channel via kernel proving
-        const kernelProof = await from.proveInit(request);
-        return kernelProof;
-    }
-
-
-    // /**
-    //  * Construct the private call data for an iteration of the kernel prover
-    //  */
-    // async constructPrivateCallData(): Promise<PrivateCallData> {
-
+    // async getAppCircuitRequest(from: AztecWallet, request: TxExecutionRequest): Promise<AppExecutionResult> {
+    //     const result = await from.simulateAppCircuit(request);
+    //     return result;
     // }
 
-    // /**
-    //  * Initializes a state channel by constructing a kernel proof for the first iteration
-    //  * that checks the integrity of the tx request
-    //  */
-    // async initStateChannel(): Promise<void> {
-
-    // }
-
-    // async constructKernelProof(firstIteration: boolean, previousProof?: ProofOutput): Promise<ProofOutput> {
-    //     const executionStack = [executionResult];
-    //     const newNotes: { [commitmentStr: string]: OutputNoteData } = {};
-    //     let previousVerificationKey = VerificationKey.makeFake();
-
-    //     let output: ProofOutput = {
-    //         publicInputs: PrivateKernelPublicInputs.empty(),
-    //         proof: makeEmptyProof()
-    //     };
-
-
-    // }
+    async getSimualtedTx(from: AztecWallet, request: TxExecutionRequest, result: AppExecutionResult): Promise<Tx> {
+        return await this.pxe.proveSimulatedAppCircuits(request, result);
+    }
 }

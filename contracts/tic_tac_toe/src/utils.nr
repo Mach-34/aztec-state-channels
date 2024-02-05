@@ -1,6 +1,9 @@
 use dep::aztec::{
     context::PrivateContext,
-    oracle::get_public_key::get_public_key,
+    oracle::{
+        get_public_key::get_public_key,
+        debug_log::debug_log_format,
+    },
     protocol_types::{
         abis::function_selector::FunctionSelector,
         address::AztecAddress
@@ -26,25 +29,38 @@ global WINNING_PLACEMENTS = [
 ];
 
 pub fn can_play(game: BoardNote, sender: Field) {
-    assert((game.host.to_field() == sender) | (game.challenger.to_field() == sender), "Sender is not challenger or host.");
+    assert(
+        (game.host.to_field() == sender) | (game.challenger.to_field() == sender), "Sender is not challenger or host."
+    );
+
+    // debug_log_format("game turn: {0}", [game.turn as Field]);
+    // debug_log_format("sender: {0}", [sender]);
+    // debug_log_format("host: {0}", [game.host.to_field()]);
+    // debug_log_format("challenger: {0}", [game.challenger.to_field()]);
 
     // Check that it is player's turn. Event turn means it is host's turn. Odd is challenger
-     if(game.turn % 2 == 0) {
+    if (game.turn as u64 % 2 == 0) {
+        // debug_log_format("host case: {0}", [game.turn as Field]);
+        // debug_log_format("modulo: {0}", [(game.turn % 2) as Field]);
         assert(sender == game.host.to_field(), "Only host can move.");
     } else {
+        // debug_log_format("guest case: {0}", [game.turn as Field]);
+        // debug_log_format("modulo: {0}", [(game.turn % 2) as Field]);
         assert(sender == game.challenger.to_field(), "Only challenger can move.");
     }
 }
 
 // Check whether endgame condition has been met for state channel
 pub fn check_game_over(board: BoardNote) -> bool {
-    let winner = WINNING_PLACEMENTS.any(|placement: [Field; 3]| {
+    let winner = WINNING_PLACEMENTS.any(
+        |placement: [Field; 3]| {
         let mut total = 0;  
         for i in 0..3 {
             total += board.moves[placement[i] as u8];
         }
         (total == 3) | (total == 12) // Winning score is going to be 3 if host, 12 if challenger
-    });
+    }
+    );
     winner | (board.turn == 9) // Return if there is a winner or a draw
 }
 
@@ -65,7 +81,6 @@ pub fn deserialize_signature(s_1: Field, s_2: Field, s_3: Field) -> [u8; 64] {
     signature[63] = s_3_bytes[23];
     signature
 }
-    
 
 pub fn encode_channel_msg(host: Field, challenger: Field) -> [u8; 64] {
     let mut msg: [u8; 64] = [0; 64];
@@ -106,12 +121,7 @@ pub fn get_game_turn(game_id: Field, turn_index: u8) -> [Field; 4] {
     // Check that move has been authorized by specified player
     let move_msg = encode_move_msg(game_id, turn_index, row as u8, col as u8);
     let sender_pubkey = get_public_key(AztecAddress::from_field(sender));
-    let verified = verify_signature(
-        sender_pubkey.x, 
-        sender_pubkey.y,
-        move_signature,
-        move_msg
-    );
+    let verified = verify_signature(sender_pubkey.x, sender_pubkey.y, move_signature, move_msg);
     assert(verified, "Move signature could not be verified.");
     [row, col, sender, timeout]
 }
@@ -144,24 +154,27 @@ pub fn open_channel(game_id: Field, context: &mut PrivateContext) -> BoardNote {
         context.this_address(),
         FunctionSelector::from_signature("start_game(Field,Field,Field)"),
         [challenger, host, game_id]
-    ); 
+    );
 
-    BoardNote::new(AztecAddress::from_field(challenger), AztecAddress::from_field(host))
+    BoardNote::new(
+        AztecAddress::from_field(challenger),
+        AztecAddress::from_field(host)
+    )
 }
 
-pub fn verify_game_start(
-    host: Field, 
-    challenger: Field, 
-    host_signature: [u8; 64],
-    challenger_signature: [u8; 64],
-) {
+pub fn verify_game_start(host: Field, challenger: Field, host_signature: [u8; 64], challenger_signature: [u8; 64]) {
     let channel_msg = encode_channel_msg(host, challenger);
 
     let hostPubkey = get_public_key(AztecAddress::from_field(host));
     let challengerPubkey = get_public_key(AztecAddress::from_field(challenger));
 
     let hostVerified = verify_signature(hostPubkey.x, hostPubkey.y, host_signature, channel_msg);
-    let challengerVerified = verify_signature(challengerPubkey.x, challengerPubkey.y, challenger_signature, channel_msg);
+    let challengerVerified = verify_signature(
+        challengerPubkey.x,
+        challengerPubkey.y,
+        challenger_signature,
+        channel_msg
+    );
     assert(hostVerified, "Host signature could not be verified");
     assert(challengerVerified, "Challenger signature could not be verified");
 }
