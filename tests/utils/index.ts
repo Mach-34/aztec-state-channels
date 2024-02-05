@@ -223,43 +223,43 @@ export const serializeSignature = (signature: Uint8Array) => {
   return { s1, s2, s3 };
 };
 
-export const simulateTurn = async (
-  pxe: PXE,
-  account: AccountWalletWithPrivateKey,
-  contractAddress: AztecAddress,
-  gameIndex: BigInt,
-  move: { row: number; col: number; turn: number },
-  executionNotes: NoteAndSlot[],
-  nullified: boolean[],
-  sideEffectCounter: number
-) => {
-  // connect to contract
-  let contract = await Contract.at(
-    contractAddress,
-    TicTacToeContractArtifact,
-    account
-  );
-  // ensure pxe is sanitized
-  await emptyCapsuleStack(contract);
-  // build capsule for turn
-  let capsuleMove = { row: move.row, col: move.col, player: account };
-  let moveCapsule = prepareMoves(gameIndex, [capsuleMove], move.turn)[0];
-  await pxe.addCapsule(moveCapsule);
-  // get execution context
-  let request = await contract.methods.turn(gameIndex).create();
-  let packedArgs = request.packedArguments[0];
-  // simulate the turn to get the app execution result
-  let result = await account.simulateAppCircuit(
-    packedArgs,
-    TurnSelector,
-    executionNotes,
-    nullified,
-    contractAddress,
-    contractAddress,
-    sideEffectCounter
-  );
-  return result;
-};
+// export const simulateTurn = async (
+//   pxe: PXE,
+//   account: AccountWalletWithPrivateKey,
+//   contractAddress: AztecAddress,
+//   gameIndex: BigInt,
+//   move: { row: number; col: number; turn: number },
+//   executionNotes: NoteAndSlot[],
+//   nullified: boolean[],
+//   sideEffectCounter: number
+// ) => {
+//   // connect to contract
+//   let contract = await Contract.at(
+//     contractAddress,
+//     TicTacToeContractArtifact,
+//     account
+//   );
+//   // ensure pxe is sanitized
+//   await emptyCapsuleStack(contract);
+//   // build capsule for turn
+//   let capsuleMove = { row: move.row, col: move.col, player: account };
+//   let moveCapsule = prepareMoves(gameIndex, [capsuleMove], move.turn)[0];
+//   await pxe.addCapsule(moveCapsule);
+//   // get execution context
+//   let request = await contract.methods.turn(gameIndex).create();
+//   let packedArgs = request.packedArguments[0];
+//   // simulate the turn to get the app execution result
+//   let result = await account.simulateAppCircuit(
+//     packedArgs,
+//     TurnSelector,
+//     executionNotes,
+//     nullified,
+//     contractAddress,
+//     contractAddress,
+//     sideEffectCounter
+//   );
+//   return result;
+// };
 
 export { signSchnorr, emptyCapsuleStack };
 export * from "./channel.js";

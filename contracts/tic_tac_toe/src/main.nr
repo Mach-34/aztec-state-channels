@@ -287,24 +287,26 @@ contract TicTacToe {
         if (boards[0].is_some()) {
             board = boards[0].unwrap_unchecked();
             assert(!board.over, "Game has ended."); // If game is over then revert
-        } else {
-            // #### Open channel ####
-            context.call_private_function(
-                context.this_address(),
-                FunctionSelector::from_signature("open_channel(Field)"),
-                [game_id]
-            );
         }
 
         let mut end_condition = false;
 
-        for i in 0..2 {
-            if (!end_condition) {
-                end_condition = context.call_private_function(
+        for i in 0..3 {
+            if((i == 0) & boards[0].is_none()) {
+                // #### Open channel ####
+                context.call_private_function(
                     context.this_address(),
-                    FunctionSelector::from_signature("turn(Field)"),
+                    FunctionSelector::from_signature("open_channel(Field)"),
                     [game_id]
-                )[0] as bool;
+                );
+            } else {
+                if (!end_condition) {
+                    end_condition = context.call_private_function(
+                        context.this_address(),
+                        FunctionSelector::from_signature("turn(Field)"),
+                        [game_id]
+                    )[0] as bool;
+                }
             }
         }
 
