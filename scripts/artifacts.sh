@@ -4,10 +4,9 @@
 # TODO: include other contracts
 
 # paths to local aztec-cli bin
-# AZTEC_CLI=$(pwd)/../aztec-packages/yarn-project/cli/dest/bin/index.js
+AZTEC_CLI=$(pwd)/../aztec-packages/yarn-project/cli/dest/bin/index.js
 
 ## Compile Counter State Channel Contract
-cd ./contracts/counter_channel
 # aztec-nargo compile
 
 ## Generate JSON ABI and TS Bindings
@@ -24,9 +23,9 @@ cd ./contracts/counter_channel
 ## Clean up workspace
 # rm -rf ./target
 
-cd ../tic_tac_toe
+cd contracts/tic_tac_toe
 aztec-nargo compile
-aztec-cli codegen ./target -o . --ts
+$AZTEC_CLI codegen ./target -o . --ts
 sed -i 's|target/tic_tac_toe-TicTacToe.json|./TicTacToe.json|' TicTacToe.ts
 mv ./target/tic_tac_toe-TicTacToe.json ../../src/artifacts/TicTacToe.json
 mv TicTacToe.ts ../../src/artifacts/TicTacToe.ts
