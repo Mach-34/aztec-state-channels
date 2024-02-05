@@ -255,7 +255,11 @@ export const simulateTurn = async (
     executionNotes,
     nullified,
     contractAddress,
+    contractAddress,
     sideEffectCounter
   );
   return result;
 };
+
+export { signSchnorr, emptyCapsuleStack };
+export * from "./channel.js";

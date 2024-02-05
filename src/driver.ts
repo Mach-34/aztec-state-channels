@@ -155,10 +155,10 @@ export class StateChannelDriver {
         return request;
     }
 
-    async getAppCircuitRequest(from: AztecWallet, request: TxExecutionRequest): Promise<AppExecutionResult> {
-        const result = await from.simulateAppCircuit(request);
-        return result;
-    }
+    // async getAppCircuitRequest(from: AztecWallet, request: TxExecutionRequest): Promise<AppExecutionResult> {
+    //     const result = await from.simulateAppCircuit(request);
+    //     return result;
+    // }
 
     async getSimualtedTx(from: AztecWallet, request: TxExecutionRequest, result: AppExecutionResult): Promise<Tx> {
         return await this.pxe.proveSimulatedAppCircuits(request, result);
