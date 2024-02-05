@@ -32,6 +32,7 @@ const {
 type StateChannel = {
   open: AppExecutionResult | undefined;
   turns: AppExecutionResult[];
+  orchestrator: AppExecutionResult | undefined;
 };
 
 describe("Tic Tac Toe", () => {
@@ -83,6 +84,7 @@ describe("Tic Tac Toe", () => {
       let stateChannel: StateChannel = {
         open: undefined,
         turns: [],
+        orchestrator: undefined,
       };
       /// OPEN CHANNEL ///
       // get contract as alice
@@ -104,6 +106,8 @@ describe("Tic Tac Toe", () => {
       let nullified: boolean[] = [];
       let sideEffectCounter = 3;
 
+      console.log("Side effect before open channel: ", sideEffectCounter);
+
       stateChannel.open = await accounts.alice.simulateAppCircuit(
         request.packedArguments[0],
         FunctionSelector.fromSignature("open_channel(Field)"),
@@ -114,12 +118,11 @@ describe("Tic Tac Toe", () => {
       );
       sideEffectCounter = Number(
         stateChannel.open.callStackItem.publicInputs.endSideEffectCounter.toBigInt()
-      );
+      ) + 1;
       executionNotes = stateChannel.open.newNotes;
       nullified = [false];
 
-      console.log("FLAG");
-
+      console.log("Side effect before turn 1: ", sideEffectCounter);
       /// TURN 1 ///
       // add move to capsule
       stateChannel.turns.push(
@@ -136,10 +139,10 @@ describe("Tic Tac Toe", () => {
       );
       sideEffectCounter = Number(
         stateChannel.turns[0].callStackItem.publicInputs.endSideEffectCounter.toBigInt()
-      ) + 2;
+      ) + 1;
       executionNotes = stateChannel.turns[0].newNotes;
       nullified = [true, false];
-      console.log("Side effects: ", sideEffectCounter);
+      console.log("Side effect before turn 2: ", sideEffectCounter);
 
 
       /// TURN 2 ///
@@ -157,21 +160,10 @@ describe("Tic Tac Toe", () => {
       );
       sideEffectCounter = Number(
         stateChannel.turns[1].callStackItem.publicInputs.endSideEffectCounter.toBigInt()
-      ) + 3; // + 1 for next call, + 1 for orchestrator loop
+      ) + 2; // + 1 for next call, + 1 for orchestrator loop
       executionNotes = stateChannel.turns[1].newNotes;
       nullified = [true, true, false];
-
-      // // console.log(
-      // //   "new commitmenmts: ",
-      // //   stateChannel.turns[1].callStackItem.publicInputs.newCommitments
-      // // );
-      // // console.log(
-      // //   "new callstack hashes: ",
-      // //   stateChannel.turns[1].callStackItem.publicInputs.privateCallStackHashes
-      // // );
-      // // console.log("x", stateChannel.turns[1].callStackItem.publicInputs);
-
-      console.log("Side effects: ", sideEffectCounter);
+      console.log("Side effect before turn 3: ", sideEffectCounter);
       /// TURN 3 ///
       stateChannel.turns.push(
         await simulateTurn(
@@ -187,10 +179,10 @@ describe("Tic Tac Toe", () => {
       );
       sideEffectCounter = Number(
         stateChannel.turns[2].callStackItem.publicInputs.endSideEffectCounter.toBigInt()
-      ) + 2;
+      ) + 1;
       executionNotes = stateChannel.turns[2].newNotes;
       nullified = [true, true, true, false];
-      console.log("Side effects: ", sideEffectCounter);
+      console.log("Side effect before turn 4: ", sideEffectCounter);
 
       /// TURN 4 ///
       stateChannel.turns.push(
@@ -207,10 +199,11 @@ describe("Tic Tac Toe", () => {
       );
       sideEffectCounter = Number(
         stateChannel.turns[3].callStackItem.publicInputs.endSideEffectCounter.toBigInt()
-      ) + 3; // + 1 for next call, + 1 for orchestrator loop
+      ) + 2; // + 1 for next call, + 1 for orchestrator loop
       executionNotes = stateChannel.turns[3].newNotes;
       nullified = [true, true, true, true, false];
-      console.log("Side effects: ", sideEffectCounter);
+      console.log("Side effect before turn 5: ", sideEffectCounter);
+
 
       /// TURN 4 ///
       stateChannel.turns.push(
@@ -238,8 +231,6 @@ describe("Tic Tac Toe", () => {
       sideEffectCounter = Number(
         stateChannel.turns[3].callStackItem.publicInputs.endSideEffectCounter.toBigInt()
       );
-      console.log("Side effects: ", sideEffectCounter);
-
 
       /////// FINALIZE STATE CHANNEL ///////
 
@@ -255,12 +246,12 @@ describe("Tic Tac Toe", () => {
       //   stateChannel.turns[4].callStackItem.publicInputs.endSideEffectCounter.toBigInt() -
       //     3n
       // );
-      sideEffectCounter = 24;
+      sideEffectCounter = 23;
       // build args
       request = await contract.methods.turn(gameIndex).create();
       executionNotes = stateChannel.turns[3].newNotes;
       nullified = [true, true, true, true, false];
-      let result = await accounts.alice.simulateAppCircuit(
+      stateChannel.orchestrator = await accounts.alice.simulateAppCircuit(
         request.packedArguments[0],
         FunctionSelector.fromSignature("orchestrator(Field)"),
         executionNotes,
@@ -270,7 +261,39 @@ describe("Tic Tac Toe", () => {
         cachedSimulations
       );
 
-      console.log("Result: ", request);
+      /// ORCHESTRATOR 2 ///
+      // build cachedSimulations
+      cachedSimulations = [stateChannel.orchestrator, stateChannel.turns[3], stateChannel.turns[2]];
+      sideEffectCounter = 14;
+      request = await contract.methods.turn(gameIndex).create();
+      executionNotes = stateChannel.turns[1].newNotes;
+      nullified = [true, true, false];
+      stateChannel.orchestrator = await accounts.alice.simulateAppCircuit(
+        request.packedArguments[0],
+        FunctionSelector.fromSignature("orchestrator(Field)"),
+        executionNotes,
+        nullified,
+        contractAddress,
+        sideEffectCounter,
+        cachedSimulations
+      );
+
+      /// ORCHESTRATOR 1 ///
+      // build cachedSimulations
+      cachedSimulations = [stateChannel.orchestrator, stateChannel.turns[1], stateChannel.turns[0], stateChannel.open];
+      sideEffectCounter = 3;
+      request = await contract.methods.turn(gameIndex).create();
+      stateChannel.orchestrator = await accounts.alice.simulateAppCircuit(
+        request.packedArguments[0],
+        FunctionSelector.fromSignature("orchestrator(Field)"),
+        [],
+        [],
+        contractAddress,
+        sideEffectCounter,
+        cachedSimulations
+      );
+
+      console.log("Orchestrator: ", stateChannel.orchestrator);
     });
   });
 
