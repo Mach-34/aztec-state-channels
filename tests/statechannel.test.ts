@@ -106,6 +106,7 @@ describe("State Channel Test", () => {
         accounts.alice
       );
       const game = await contract.methods.get_game(gameIndex).view();
+      console.log("Game: ", game);
       expect(game.winner.inner).toEqual(accounts.alice.getAddress().toBigInt());
     });
 
