@@ -89,10 +89,10 @@ impl BoardNote {
                 self.turn as Field
             ], 0)
         } else {
-            let recipient = if self.turn as u64 % 2 == 1 {
-                self.challenger
-            } else {
+            let recipient = if (self.turn & 1) == 0 {
                 self.host
+            } else {
+                self.challenger
             };
             let secret = context.request_nullifier_secret_key(recipient);
             pedersen_hash([
@@ -116,7 +116,7 @@ impl BoardNote {
                 self.turn as Field
             ], 0)
         } else {
-            let recipient = if self.turn as u64 % 2 == 0 {
+            let recipient = if (self.turn & 1) == 0 {
                 self.host
             } else {
                 self.challenger
@@ -153,7 +153,7 @@ impl BoardNote {
             }
         } else {
             debug_log_format("Turn {0}", [self.turn as Field]);
-            let recipient = if self.turn as u64 % 2 == 0 {
+            let recipient = if (self.turn & 1) == 0 {
                 self.host
             } else {
                 debug_log_format("Challenger: {0}", [self.turn as Field]);

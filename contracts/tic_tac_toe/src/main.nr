@@ -16,6 +16,7 @@ contract TicTacToe {
             utils as note_utils
         },
         oracle::{
+            debug_log::debug_log_format,
             get_public_key::get_public_key
         },
         protocol_types::{
@@ -129,6 +130,7 @@ contract TicTacToe {
         let note_hash = board.compute_note_hash();
 
         storage.boards.at(game_index).remove(board);
+        board.pending_timeout = false;
         board.over = true;
         storage.boards.at(game_index).insert(&mut board, true);
         context.call_public_function(
@@ -159,7 +161,7 @@ contract TicTacToe {
         } else {
             board.moves[coord] = 4;
         }
-
+        board.pending_timeout = false;
         let game_over = check_game_over(board);
 
         context.call_public_function(
@@ -232,6 +234,10 @@ contract TicTacToe {
         let timeout = turn[3] as bool;
         let mut game_over = false;
 
+        debug_log_format("Game host {0}", [board.host.to_field()]);
+        debug_log_format("Game challenger {0}", [board.challenger.to_field()]);
+        debug_log_format("Sender {0}", [sender]);
+
         can_play(board, sender); // Check that player is in game and it is their turn
         legal_move(board.moves, row, col); // Check legal move
 
@@ -250,6 +256,7 @@ contract TicTacToe {
         board.turn += 1;
 
         if (timeout) {
+            board.pending_timeout = true;
             let note_hash = board.compute_note_hash();
             context.call_public_function(
                 context.this_address(),
@@ -274,7 +281,7 @@ contract TicTacToe {
                 );
                 storage.boards.at(game_id).insert(&mut board, true); // Store updated board
             } else {
-                storage.boards.at(game_id).insert(&mut board, false); // Store updated board
+                storage.boards.at(game_id).insert(&mut board, true); // Store updated board
             }
         }
         game_over | timeout

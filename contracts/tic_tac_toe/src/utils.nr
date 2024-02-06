@@ -33,13 +33,12 @@ pub fn can_play(game: BoardNote, sender: Field) {
         (game.host.to_field() == sender) | (game.challenger.to_field() == sender), "Sender is not challenger or host."
     );
 
-    // debug_log_format("game turn: {0}", [game.turn as Field]);
     // debug_log_format("sender: {0}", [sender]);
     // debug_log_format("host: {0}", [game.host.to_field()]);
     // debug_log_format("challenger: {0}", [game.challenger.to_field()]);
 
     // Check that it is player's turn. Event turn means it is host's turn. Odd is challenger
-    if (game.turn as u64 % 2 == 0) {
+    if ((game.turn & 1) == 0) {
         // debug_log_format("host case: {0}", [game.turn as Field]);
         // debug_log_format("modulo: {0}", [(game.turn % 2) as Field]);
         assert(sender == game.host.to_field(), "Only host can move.");

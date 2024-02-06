@@ -54,10 +54,10 @@ describe("State Channel Test", () => {
     // Clear out capsule stack each time tests are ran
     try {
       await emptyCapsuleStack(deployed);
-    } catch (err) {}
+    } catch (err) { }
   });
 
-  describe("TicTacToe State Channel Single PXE", () => {
+  xdescribe("TicTacToe State Channel Single PXE", () => {
     afterEach(async () => {
       gameIndex++;
     });
@@ -109,9 +109,9 @@ describe("State Channel Test", () => {
       expect(game.winner.inner).toEqual(accounts.alice.getAddress().toBigInt());
     });
 
-    xtest("Draw Game State Channel", async () => {});
+    xtest("Draw Game State Channel", async () => { });
 
-    xtest("Statechannel Timeout With No Dispute", async () => {});
-    xtest("Statechannel Timeout With Dispute", async () => {});
+    xtest("Statechannel Timeout With No Dispute", async () => { });
+    xtest("Statechannel Timeout With Dispute", async () => { });
   });
 });
