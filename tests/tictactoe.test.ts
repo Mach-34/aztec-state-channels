@@ -81,53 +81,6 @@ describe("Tic Tac Toe", () => {
     afterEach(async () => {
       gameIndex++;
     });
-
-    test("TicTacToe State Channel Single PXE", async () => {
-      // create the tic tac toe state channel driver
-      const stateChannel = new TicTacToeStateChannel(
-        pxe,
-        contractAddress,
-        gameIndex
-      );
-
-      /// OPEN CHANNEL ///
-      // sign the channel open message as bob
-      let guestChannelOpenSignature = TicTacToeStateChannel.signOpenChannel(
-        accounts.bob,
-        accounts.alice.getAddress(),
-        true
-      );
-      // open the channel
-      await stateChannel.openChannel(accounts.alice, guestChannelOpenSignature);
-
-      /// PLAY GAME ///
-      // turn 1
-      let move = { row: 0, col: 0 };
-      await stateChannel.turn(accounts.alice, move);
-      // turn 2
-      move = { row: 1, col: 1 };
-      await stateChannel.turn(accounts.bob, move);
-      // turn 3
-      move = { row: 0, col: 1 };
-      await stateChannel.turn(accounts.alice, move);
-      // turn 4
-      move = { row: 2, col: 2 };
-      await stateChannel.turn(accounts.bob, move);
-      // turn 5 (WINNING MOVE)
-      move = { row: 0, col: 2 };
-      await stateChannel.turn(accounts.alice, move);
-
-      /// FINALIZE THE GAME ONCHAIN ///
-      await stateChannel.finalize(accounts.alice);
-      // ensure the onchain state reflects the execution of the state channel
-      const contract = await Contract.at(
-        contractAddress,
-        TicTacToeContractArtifact,
-        accounts.alice
-      );
-      const game = await contract.methods.get_game(gameIndex).view();
-      expect(game.winner.inner).toEqual(accounts.alice.getAddress().toBigInt());
-    });
   });
 
   describe("Test state channel over orchestrator function", () => {
@@ -202,8 +155,8 @@ describe("Tic Tac Toe", () => {
         );
       });
     });
-    xdescribe("Test gameplay over state channel", () => {
-      xtest("Transaction should fail when private key other than player's is used to sign move", async () => {
+    describe("Test gameplay over state channel", () => {
+      test("Transaction should fail when private key other than player's is used to sign move", async () => {
         const contract = await Contract.at(
           contractAddress,
           TicTacToeContractArtifact,
@@ -241,7 +194,7 @@ describe("Tic Tac Toe", () => {
         );
       });
 
-      xtest("Transaction should fail when other coordinates than what were signed are provided", async () => {
+      test("Transaction should fail when other coordinates than what were signed are provided", async () => {
         const contract = await Contract.at(
           contractAddress,
           TicTacToeContractArtifact,
@@ -269,7 +222,7 @@ describe("Tic Tac Toe", () => {
         );
       });
 
-      xtest("Moves should only be made by the registered host and player of the game", async () => {
+      test("Moves should only be made by the registered host and player of the game", async () => {
         const contract = await Contract.at(
           contractAddress,
           TicTacToeContractArtifact,
@@ -302,7 +255,7 @@ describe("Tic Tac Toe", () => {
         );
       });
 
-      xtest("If a row index is out of bounds then the transaction should revert", async () => {
+      test("If a row index is out of bounds then the transaction should revert", async () => {
         const contract = await Contract.at(
           contractAddress,
           TicTacToeContractArtifact,
@@ -331,7 +284,7 @@ describe("Tic Tac Toe", () => {
         );
       });
 
-      xtest("If a column index is out of bounds then the transaction should revert", async () => {
+      test("If a column index is out of bounds then the transaction should revert", async () => {
         const contract = await Contract.at(
           contractAddress,
           TicTacToeContractArtifact,
@@ -358,7 +311,7 @@ describe("Tic Tac Toe", () => {
         );
       });
 
-      xtest("If a coordinate is already occupied then the transaction should revert", async () => {
+      test("If a coordinate is already occupied then the transaction should revert", async () => {
         const contract = await Contract.at(
           contractAddress,
           TicTacToeContractArtifact,
@@ -388,7 +341,7 @@ describe("Tic Tac Toe", () => {
         );
       });
 
-      xtest("Player should be unable to make two turns in a row", async () => {
+      test("Player should be unable to make two turns in a row", async () => {
         const contract = await Contract.at(
           contractAddress,
           TicTacToeContractArtifact,
@@ -420,7 +373,7 @@ describe("Tic Tac Toe", () => {
         );
       });
 
-      xtest("Reordered moves should cause signature verification to fail", async () => {
+      test("Reordered moves should cause signature verification to fail", async () => {
         const contract = await Contract.at(
           contractAddress,
           TicTacToeContractArtifact,
@@ -501,7 +454,7 @@ describe("Tic Tac Toe", () => {
         );
       });
 
-      xtest("Subsequent move on won game should revert", async () => {
+      test("Subsequent move on won game should revert", async () => {
         gameIndex--;
         const contract = await Contract.at(
           contractAddress,

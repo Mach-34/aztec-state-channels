@@ -269,19 +269,20 @@ export class TicTacToeStateChannel {
     account: AccountWalletWithPrivateKey
   ): Promise<TxReceipt> {
     // if individual turns/ channel open have not been orchestrated yet, do so
-    console.log("orchestrator result: ", this.orchestratorResult);
     if (!this.orchestratorResult) {
       await this.orchestrate(account);
     }
+    console.log("prelim")
     // get contract
     const contract = await this.getContract(account);
     // construct the full tx request to post on chain
     let request = await contract.methods.orchestrator(this.gameIndex).create();
+    console.log("req")
     let tx = await account.proveSimulatedAppCircuits(
       request,
       this.orchestratorResult!
     );
-
+    console.log("orchestrated");
     // broadcast the transaction
     let result = await new SentTx(this.pxe, account.sendTx(tx)).wait();
     if (result.status !== TxStatus.MINED)

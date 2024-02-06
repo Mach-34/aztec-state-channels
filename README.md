@@ -2,10 +2,8 @@
 
 ## Instructions on Demo:
 
-1. Ensure correct versioning of aztec CLI's:
+1. Ensure correct versioning of aztec nargo:
 ```console
-aztec-cli -V
-// 0.20.0
 aztec-nargo -V
 // nargo version = 0.23.0
 // noirc version = 0.23.0+602f23f4fb698cf6e37071936a2a46593a998d08
@@ -35,7 +33,7 @@ PARENT_DIR/
 
 4a. in a new terminal, run a local ethereum node: `anvil -p 8545 --host 0.0.0.0 --chain-id 31337`
 
-4b. in the original terminal window, in `PARENT_DIR/aztec-packages/yarn_project`, start the aztec sandbox service: `./aztec-sandbox/dest/bin/index.js`
+4b. in the original terminal window (should be in PARENT_DIR/aztec-packages), do `cd ./yarn_project/aztec/ && yarn start`
 
 5. Install the Aztec State Channels repository in a new terminal window
 5a. in PARENT_DIR, run `git clone https://github.com/mach-34/aztec-state-channels && cd statechannel`

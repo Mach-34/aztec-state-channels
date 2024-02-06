@@ -96,6 +96,7 @@ describe("State Channel Test", () => {
       // turn 5 (WINNING MOVE)
       move = { row: 0, col: 2 };
       await stateChannel.turn(accounts.alice, move);
+      console.log("5")
 
       /// FINALIZE THE GAME ONCHAIN ///
       await stateChannel.finalize(accounts.alice);
