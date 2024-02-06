@@ -9,7 +9,9 @@
   },
   "scripts": {
     "artifacts": "./scripts/artifacts.sh",
-    "sandbox": "SANDBOX_VERSION=0.16.7 /bin/bash -c \"$(curl -fsSL 'https://sandbox.aztec.network')\"",
+    "anvil": "anvil -p 8545 --host 0.0.0.0 --chain-id 31337",
+    "sandbox": "./../aztec-packages/yarn-project/aztec-sandbox/dest/bin/index.js",
+    "pxe:secondary": "MODE=pxe PXE_PORT=8085 AZTEC_NODE_URL='http://localhost:8079/' TEST_ACCOUNTS='false' npm run sandbox",
     "test": "NODE_NO_WARNINGS=1 node --experimental-vm-modules $(yarn bin jest) --no-cache --runInBand --verbose --config jest.integration.config.json"
   },
   "devDependencies": {

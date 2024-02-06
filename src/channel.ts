@@ -5,7 +5,7 @@ import {
   TxStatus,
 } from "@aztec/circuit-types";
 import { AztecAddress } from "@aztec/circuits.js";
-import { TicTacToeContractArtifact } from "../../src/artifacts/TicTacToe.js";
+import { TicTacToeContract } from "./artifacts/TicTacToe.js";
 import {
   AccountWalletWithPrivateKey,
   Contract,
@@ -19,7 +19,7 @@ import {
   serializeSignature,
   emptyCapsuleStack,
   signSchnorr,
-} from "./index.js";
+} from "./utils/index.js";
 
 export type OpenChannelSignature = {
   from: AztecAddress;
@@ -33,8 +33,6 @@ export class TicTacToeStateChannel {
   public turnResults: AppExecutionResult[] = [];
   /** Running top-level simulation of `orchestrator` app circuit (will be highest level on call "orchestrate") */
   public orchestratorResult: AppExecutionResult | undefined;
-  /** Cache of orchestrator side effects until we can figure out how to deterministically compute */
-  // public orchestratorSideEffectCache: number[] = [];
 
   // FUNCTION SELECTORS //
   public functionSelectors = {
@@ -134,8 +132,6 @@ export class TicTacToeStateChannel {
       this.contractAddress,
       sideEffectCounter
     );
-    // push orchestrator side effect start (will also always be 3 (why tho))
-    // this.orchestratorSideEffectCache.push(sideEffectCounter);
   }
 
   /**
@@ -168,7 +164,6 @@ export class TicTacToeStateChannel {
     let { notes, nullified } = this.getNotesAndNullified();
     // calculate the current side effect counter
     let sideEffectCounter = this.getTurnSideEffectCounter(turnIndex);
-    console.log("sideEffect: ", sideEffectCounter);
     // simulate the turn to get the app execution result
     this.turnResults.push(
       await account.simulateAppCircuit(
@@ -181,19 +176,6 @@ export class TicTacToeStateChannel {
         sideEffectCounter
       )
     );
-    // // push orchestrator side effect cache if next call will be orchestrator
-    // if (
-    //   (this.turnResults.length == 2 ||
-    //     (this.turnResults.length > 3 && this.turnResults.length % 3 === 0)) &&
-    //   !this.checkChannelOver()
-    // ) {
-    //   // get side effect from last turn
-    //   let lastTurn = this.turnResults[this.turnResults.length - 1];
-    //   let lastSideEffectCounter =
-    //     lastTurn.callStackItem.publicInputs.endSideEffectCounter.toBigInt();
-    //   // push the side effect counter to the cache
-    //   this.orchestratorSideEffectCache.push(Number(lastSideEffectCounter + 1n));
-    // }
   }
 
   /**
@@ -222,7 +204,6 @@ export class TicTacToeStateChannel {
     // loop through all app execution circuits and build the nested executions, saving first orchestrator for outside loop
     let numTurns = this.turnResults.length;
     while (numTurns > 2) {
-      console.log("orchestrating iteration")
       // get the turn results used in this orchestrator call
       let numElements = (numTurns - 2) % 3;
       let startIndex =
@@ -256,7 +237,6 @@ export class TicTacToeStateChannel {
       this.turnResults[0],
       this.openChannelResult!,
     ];
-    console.log("orchestrating last")
     this.orchestratorResult = await account.simulateAppCircuit(
       packedArguments,
       this.functionSelectors.orchestrate,
@@ -267,7 +247,6 @@ export class TicTacToeStateChannel {
       3, // always 3 for first side effect counter
       cachedSimulations
     );
-    console.log("orchestrated")
   }
 
   /**
@@ -279,7 +258,6 @@ export class TicTacToeStateChannel {
   public async finalize(
     account: AccountWalletWithPrivateKey
   ): Promise<TxReceipt> {
-    console.log("orchestrating")
     // if individual turns/ channel open have not been orchestrated yet, do so
     if (!this.orchestratorResult) {
       await this.orchestrate(account);
@@ -287,9 +265,7 @@ export class TicTacToeStateChannel {
     // get contract
     const contract = await this.getContract(account);
     // construct the full tx request to post on chain
-    console.log("Orchestrated");
     let request = await contract.methods.orchestrator(this.gameIndex).create();
-    console.log("Request");
     let tx = await account.proveSimulatedAppCircuits(
       request,
       this.orchestratorResult!
@@ -370,7 +346,7 @@ export class TicTacToeStateChannel {
   /**
    * Get the side effect counter according to the stored state
    * @param index - the index to compute side effect counter for
-   * 
+   *
    * @returns - the side effect counter for the next increment
    */
   public getTurnSideEffectCounter(turnIndex: number): number {
@@ -385,7 +361,8 @@ export class TicTacToeStateChannel {
         1n;
     } else {
       // if turn is 2 (using 0 index), or if turn > 3 and is a multiple of 3, increment by 2
-      let incrementBy = (turnIndex === 2 || (turnIndex > 3 && turnIndex % 3 === 0)) ? 2n : 1n;
+      let incrementBy =
+        turnIndex === 2 || (turnIndex > 3 && turnIndex % 3 === 0) ? 2n : 1n;
       sideEffectCounter =
         this.turnResults[
           turnIndex - 1
@@ -400,10 +377,9 @@ export class TicTacToeStateChannel {
    * @param account - the account wallet to use within the PXE with this contract
    * @returns - the contract instance
    */
-  public async getContract(account: AccountWalletWithPrivateKey) {
-    return await Contract.at(
+  public async getContract(account: AccountWalletWithPrivateKey): Promise<TicTacToeContract> {
+    return await TicTacToeContract.at(
       this.contractAddress,
-      TicTacToeContractArtifact,
       account
     );
   }

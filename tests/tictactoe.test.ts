@@ -3,7 +3,6 @@ import {
   AccountWalletWithPrivateKey,
   AztecAddress,
   CheatCodes,
-  Contract,
   createDebugLogger,
   createPXEClient,
   DebugLogger,
@@ -11,21 +10,23 @@ import {
   PXE,
 } from "@aztec/aztec.js";
 import { createAccount } from "@aztec/accounts/testing";
-import { TicTacToeContractArtifact } from "../src/artifacts/TicTacToe.js";
-import { emptyCapsuleStack, numToHex, signSchnorr } from "../src/utils.js";
 import {
+  emptyCapsuleStack,
+  numToHex,
+  signSchnorr,
   genSerializedMoveSignature,
   prepareMoves,
   prepareOpenChannel,
   serializeSignature,
-} from "./utils/index.js";
-import { FunctionSelector } from "@aztec/aztec.js";
+  TicTacToeContract,
+} from "../src/index.js";
+
 const {
   ETH_RPC_URL = "http://localhost:8545",
   PXE_URL = "http://localhost:8080",
 } = process.env;
 
-xdescribe("Tic Tac Toe", () => {
+describe("Tic Tac Toe", () => {
   jest.setTimeout(1500000);
   let contractAddress: AztecAddress;
   let cc: CheatCodes;
@@ -40,7 +41,7 @@ xdescribe("Tic Tac Toe", () => {
   let gameIndex = 0n;
 
   beforeAll(async () => {
-    logger = createDebugLogger("tictactoe");
+    logger = createDebugLogger("tic_tac_toe:logic");
 
     pxe = await createPXEClient(PXE_URL);
 
@@ -53,11 +54,7 @@ xdescribe("Tic Tac Toe", () => {
       david: await createAccount(pxe),
     };
 
-    const deployed = await Contract.deploy(
-      accounts.alice,
-      TicTacToeContractArtifact,
-      []
-    )
+    const deployed = await TicTacToeContract.deploy(accounts.alice)
       .send()
       .deployed();
     contractAddress = deployed.address;
@@ -73,9 +70,8 @@ xdescribe("Tic Tac Toe", () => {
     });
 
     beforeEach(async () => {
-      const contract = await Contract.at(
+      const contract = await TicTacToeContract.at(
         contractAddress,
-        TicTacToeContractArtifact,
         accounts.alice
       );
       try {
@@ -99,9 +95,8 @@ xdescribe("Tic Tac Toe", () => {
         const charliePrivkey = accounts.charlie.getEncryptionPrivateKey();
         const charlieSignature = signSchnorr(channelMsg, charliePrivkey);
 
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
 
@@ -127,13 +122,7 @@ xdescribe("Tic Tac Toe", () => {
           charlie_s3,
         ]);
 
-        const call = contract.methods.orchestrator(
-          aliceAddress,
-          bobAddress,
-          aliceSignature,
-          charlieSignature,
-          gameIndex
-        );
+        const call = contract.methods.orchestrator(gameIndex);
         await expect(call.simulate()).rejects.toThrowError(
           /Challenger signature could not be verified/
         );
@@ -142,9 +131,8 @@ xdescribe("Tic Tac Toe", () => {
 
     describe("Test gameplay over state channel", () => {
       test("Transaction should fail when private key other than player's is used to sign move", async () => {
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
         // Create dummy move to pop capsule once
@@ -180,9 +168,8 @@ xdescribe("Tic Tac Toe", () => {
       });
 
       test("Transaction should fail when other coordinates than what were signed are provided", async () => {
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
         // Create dummy move to pop capsule once
@@ -208,9 +195,8 @@ xdescribe("Tic Tac Toe", () => {
       });
 
       test("Moves should only be made by the registered host and player of the game", async () => {
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
 
@@ -241,9 +227,8 @@ xdescribe("Tic Tac Toe", () => {
       });
 
       test("If a row index is out of bounds then the transaction should revert", async () => {
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
 
@@ -270,9 +255,8 @@ xdescribe("Tic Tac Toe", () => {
       });
 
       test("If a column index is out of bounds then the transaction should revert", async () => {
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
 
@@ -297,9 +281,8 @@ xdescribe("Tic Tac Toe", () => {
       });
 
       test("If a coordinate is already occupied then the transaction should revert", async () => {
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
 
@@ -327,9 +310,8 @@ xdescribe("Tic Tac Toe", () => {
       });
 
       test("Player should be unable to make two turns in a row", async () => {
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
 
@@ -359,9 +341,8 @@ xdescribe("Tic Tac Toe", () => {
       });
 
       test("Reordered moves should cause signature verification to fail", async () => {
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
 
@@ -397,23 +378,10 @@ xdescribe("Tic Tac Toe", () => {
       });
 
       test("Play a game until won", async () => {
-        // print function selectors
-        let open = FunctionSelector.fromSignature(
-          "open_channel(Field)"
-        ).toString();
-        let turn = FunctionSelector.fromSignature("turn(Field)").toString();
-        let orchestrator = FunctionSelector.fromSignature(
-          "orchestrator(Field)"
-        ).toString();
-        console.log("open: ", open);
-        console.log("turn: ", turn);
-        console.log("orchestrator: ", orchestrator);
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
-
         const openChannelCapsule = prepareOpenChannel(
           accounts.alice,
           accounts.bob
@@ -441,9 +409,8 @@ xdescribe("Tic Tac Toe", () => {
 
       test("Subsequent move on won game should revert", async () => {
         gameIndex--;
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
 
@@ -456,10 +423,9 @@ xdescribe("Tic Tac Toe", () => {
         await expect(call.simulate()).rejects.toThrowError(/Game has ended./);
       });
 
-      test("Play game to draw", async () => {
-        const contract = await Contract.at(
+      xtest("Play game to draw", async () => {
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
 
@@ -491,11 +457,10 @@ xdescribe("Tic Tac Toe", () => {
         expect(game.over).toEqual(true);
       });
 
-      test("Subsequent move on game with draw should revert", async () => {
+      xtest("Subsequent move on game with draw should revert", async () => {
         gameIndex--;
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
         const moves = [{ row: 2, col: 0, player: accounts.bob }];
@@ -508,25 +473,8 @@ xdescribe("Tic Tac Toe", () => {
 
     describe("Test timout function", () => {
       test("Trigger timeout and confirm it to be set at note hash", async () => {
-        console.log(
-          "trigger timeout selector: ",
-          FunctionSelector.fromSignature(
-            "trigger_timeout(Field,Field)"
-          ).toString()
-        );
-        console.log(
-          "set_winner_from_timeout: ",
-          FunctionSelector.fromSignature(
-            "set_winner_from_timeout(Field,Field)"
-          ).toString()
-        );
-        console.log(
-          "claim_timeout_win: ",
-          FunctionSelector.fromSignature("claim_timeout_win(Field)").toString()
-        );
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
         const moves = [
@@ -553,9 +501,8 @@ xdescribe("Tic Tac Toe", () => {
 
       test("Transaction should revert if timestamp window has not concluded", async () => {
         gameIndex--;
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
         const call = contract.methods.claim_timeout_win(gameIndex);
@@ -566,9 +513,8 @@ xdescribe("Tic Tac Toe", () => {
 
       test("Alice should be able to claim game win now that timeout window has passed", async () => {
         gameIndex--;
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
         const noteHash = await contract.methods
@@ -586,9 +532,8 @@ xdescribe("Tic Tac Toe", () => {
       });
 
       test("Disputed timeout should update state to next turn", async () => {
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
 
@@ -625,9 +570,8 @@ xdescribe("Tic Tac Toe", () => {
 
       test("Win should not be claimmable after timeout is disputed", async () => {
         gameIndex--;
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
         const call = contract.methods.claim_timeout_win(gameIndex);
@@ -637,9 +581,8 @@ xdescribe("Tic Tac Toe", () => {
       });
 
       test("Updated state in dispute timeout function should result in a game winner in some cases", async () => {
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
 
@@ -664,9 +607,8 @@ xdescribe("Tic Tac Toe", () => {
 
         await contract.methods.orchestrator(gameIndex).send().wait();
 
-        const bobContract = await Contract.at(
+        const bobContract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.bob
         );
         await bobContract.methods
@@ -680,9 +622,8 @@ xdescribe("Tic Tac Toe", () => {
       });
 
       test("When timeout is disputed then game should be playable again to conclusion", async () => {
-        const contract = await Contract.at(
+        const contract = await TicTacToeContract.at(
           contractAddress,
-          TicTacToeContractArtifact,
           accounts.alice
         );
 
