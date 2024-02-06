@@ -14,7 +14,6 @@ use dep::std::{
 };
 use crate::types::{
     board::BoardNote,
-    game::GameNote,
 };
 
 global CAPSULE_SIZE = 8; // Set to length of largest possible capsule (open channel / game tart)

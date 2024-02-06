@@ -44,9 +44,6 @@ contract TicTacToe {
             game::{
                 Game,
                 GameMethods,
-                GameNote, 
-                GameNoteMethods,
-                GAME_NOTE_LEN,
                 GAME_SERIALIZED_LEN
             },
         },
@@ -67,9 +64,8 @@ contract TicTacToe {
 
     struct Storage {
         current_game: PublicState<Field, FIELD_SERIALIZED_LEN>,
-        games: Map<Field, Set<GameNote, GAME_NOTE_LEN>>,
         timeouts: Map<Field, PublicState<Field, FIELD_SERIALIZED_LEN>>,
-        games_public: Map<Field, PublicState<Game, GAME_SERIALIZED_LEN>>,
+        games: Map<Field, PublicState<Game, GAME_SERIALIZED_LEN>>,
         boards: Map<Field, Set<BoardNote, BOARD_NOTE_LEN>>
     }
 
@@ -77,30 +73,23 @@ contract TicTacToe {
         fn init(context: Context) -> Self {
             Storage {
                 current_game: PublicState::new(context, 1, FieldSerializationMethods),
-                games: Map::new(
-                    context,
-                    2,
-                    |context, slot| {
-                        Set::new(context, slot, GameNoteMethods)
-                    }
-                ),
                 timeouts: Map::new(
                     context, 
-                    3, 
+                    2, 
                     |context, slot| {
                         PublicState::new(context, slot, FieldSerializationMethods)
                     }
                 ),
-                games_public: Map::new(
+                games: Map::new(
                     context, 
-                    4, 
+                    3, 
                     |context, slot| {
                         PublicState::new(context, slot, GameMethods)
                     }
                 ),
                 boards: Map::new(
                     context,
-                    5,
+                    4,
                     |context, slot| {
                         Set::new(context, slot, BoardNoteMethods)
                     }
@@ -317,10 +306,10 @@ contract TicTacToe {
 
     #[aztec(public)]
     internal fn assign_winner(game_index: Field, winner: AztecAddress) {
-        let mut game = storage.games_public.at(game_index).read();
+        let mut game = storage.games.at(game_index).read();
         game.over = true;
         game.winner = winner;
-        storage.games_public.at(game_index).write(game);
+        storage.games.at(game_index).write(game);
     }
 
     #[aztec(public)]
@@ -334,7 +323,7 @@ contract TicTacToe {
         // Set timestamp for timeout to 0
         storage.timeouts.at(hash).write(0);
 
-        let mut game = storage.games_public.at(game_index).read();
+        let mut game = storage.games.at(game_index).read();
         game.over = true;
 
         // Winner is host
@@ -344,7 +333,7 @@ contract TicTacToe {
         } else {
             game.winner = game.challenger;
         }
-        storage.games_public.at(game_index).write(game);
+        storage.games.at(game_index).write(game);
     }
 
     #[aztec(public)]
@@ -357,15 +346,6 @@ contract TicTacToe {
         storage.timeouts.at(hash).write(0);
     }
 
-    #[aztec(private)]
-    internal fn set_winner_from_timeout(game_id: Field, winner: Field) {
-        let mut game = storage.games.at(game_id).get_notes(NoteGetterOptions::new())[0].unwrap_unchecked();
-        // Remove note so we do not have duplicates
-        storage.games.at(game_id).remove(game);
-        game.winner = AztecAddress::from_field(winner);
-        storage.games.at(game_id).insert(&mut game, true);
-    }
-
     #[aztec(public)]
     internal fn trigger_timeout(note_hash: Field) {
         storage.timeouts.at(note_hash).write(context.timestamp());
@@ -376,7 +356,7 @@ contract TicTacToe {
         // let current_game_index = storage.current_game.read();
 
         // Create new game in storage
-        storage.games_public.at(game_id).write(
+        storage.games.at(game_id).write(
             Game {
             challenger: AztecAddress::from_field(challenger),
             host: AztecAddress::from_field(host),
@@ -411,7 +391,7 @@ contract TicTacToe {
     }
 
     unconstrained fn get_game(index: Field) -> pub Game {
-        storage.games_public.at(index).read()
+        storage.games.at(index).read()
     }
 
     unconstrained fn get_game_note_hash(index: Field) -> pub Field {
