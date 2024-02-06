@@ -181,7 +181,11 @@ export class TicTacToeStateChannel {
       )
     );
     // push orchestrator side effect cache if next call will be orchestrator
-    if (this.turnResults.length % 2 === 0 && !this.checkChannelOver()) {
+    if (
+      (this.turnResults.length == 2 ||
+        (this.turnResults.length > 3 && this.turnResults.length % 3 === 0)) &&
+      !this.checkChannelOver()
+    ) {
       // get side effect from last turn
       let lastTurn = this.turnResults[this.turnResults.length - 1];
       let lastSideEffectCounter =
@@ -218,7 +222,9 @@ export class TicTacToeStateChannel {
     let numTurns = this.turnResults.length;
     while (numTurns > 2) {
       // get the turn results used in this orchestrator call
-      let startIndex = numTurns % 2 === 0 ? numTurns - 2 : numTurns - 1;
+      let numElements = (numTurns - 2) % 3;
+      let startIndex =
+        numElements === 0 ? numTurns - 3 : numTurns - numElements;
       let cachedSimulations = this.turnResults.slice(startIndex, numTurns);
       if (this.orchestratorResult)
         cachedSimulations.push(this.orchestratorResult);
@@ -269,7 +275,6 @@ export class TicTacToeStateChannel {
     account: AccountWalletWithPrivateKey
   ): Promise<TxReceipt> {
     // if individual turns/ channel open have not been orchestrated yet, do so
-    console.log("orchestrator result: ", this.orchestratorResult);
     if (!this.orchestratorResult) {
       await this.orchestrate(account);
     }
@@ -366,15 +371,14 @@ export class TicTacToeStateChannel {
         this.openChannelResult!.callStackItem.publicInputs.endSideEffectCounter.toBigInt() +
         1n;
     } else {
-      // if turn % 2 == 1, add 1 to side effect counter else return 2
+      // if turn is 2 (using 0 index), or if turn > 3 and is a multiple of 3, increment by 2
       let turn = this.turnResults.length;
-      let incrementBy = turn % 2 === 1 ? 1n : 2n;
+      let incrementBy = (turn === 2 || (turn > 3 && turn % 3 === 0)) ? 2n : 1n;
       sideEffectCounter =
         this.turnResults[
           turn - 1
         ].callStackItem.publicInputs.endSideEffectCounter.toBigInt() +
         incrementBy;
-      // @dev will change when 3 turns is possible inside one orchestrator
     }
     return Number(sideEffectCounter);
   }

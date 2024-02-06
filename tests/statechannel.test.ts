@@ -19,7 +19,7 @@ const {
   PXE_URL = "http://localhost:8080",
 } = process.env;
 
-xdescribe("State Channel Test", () => {
+describe("State Channel Test", () => {
   jest.setTimeout(1500000);
   let contractAddress: AztecAddress;
   let cc: CheatCodes;
@@ -57,7 +57,7 @@ xdescribe("State Channel Test", () => {
     } catch (err) { }
   });
 
-  xdescribe("TicTacToe State Channel Single PXE", () => {
+  describe("TicTacToe State Channel Single PXE", () => {
     afterEach(async () => {
       gameIndex++;
     });
@@ -99,7 +99,7 @@ xdescribe("State Channel Test", () => {
 
       /// FINALIZE THE GAME ONCHAIN ///
       await stateChannel.finalize(accounts.alice);
-      // ensure the onchain state reflects the execution of the state channel
+      // // ensure the onchain state reflects the execution of the state channel
       const contract = await Contract.at(
         contractAddress,
         TicTacToeContractArtifact,

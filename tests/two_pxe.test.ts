@@ -16,8 +16,8 @@ import { TicTacToeStateChannel } from "./utils/index.js";
 
 const {
     ETH_RPC_URL = "http://localhost:8545",
-    PXE_URL = "http://localhost:8080",
-    PXE_TWO_URL = "http://localhost:8085",
+    PRIMARY_PXE_URL = "http://localhost:8080",
+    SECONDARY_PXE_URL = "http://localhost:8085",
 } = process.env;
 
 xdescribe("State Channel Test With Two PXEs", () => {
@@ -36,8 +36,8 @@ xdescribe("State Channel Test With Two PXEs", () => {
     beforeAll(async () => {
         logger = createDebugLogger("state_channel:tic_tac_toe");
 
-        pxe = await createPXEClient(PXE_URL);
-        pxe2 = await createPXEClient(PXE_TWO_URL);
+        pxe = await createPXEClient(PRIMARY_PXE_URL);
+        pxe2 = await createPXEClient(SECONDARY_PXE_URL);
 
         cc = await CheatCodes.create(ETH_RPC_URL, pxe);
 
