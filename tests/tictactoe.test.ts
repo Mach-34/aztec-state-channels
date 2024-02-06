@@ -146,7 +146,7 @@ describe("Tic Tac Toe", () => {
             } catch (err) { }
         });
 
-        xdescribe("Test game creation", () => {
+        describe("Test game creation", () => {
             test("Game should fail to start if at least one signature is not valid", async () => {
                 const aliceAddress = accounts.alice.getAddress().toBuffer();
                 const bobAddress = accounts.bob.getAddress().toBuffer();
@@ -202,6 +202,7 @@ describe("Tic Tac Toe", () => {
                 );
             });
         });
+
         describe("Test gameplay over state channel", () => {
             test("Transaction should fail when private key other than player's is used to sign move", async () => {
                 const contract = await Contract.at(

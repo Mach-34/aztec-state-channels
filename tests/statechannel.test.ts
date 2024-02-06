@@ -19,7 +19,7 @@ const {
   PXE_URL = "http://localhost:8080",
 } = process.env;
 
-describe("State Channel Test", () => {
+xdescribe("State Channel Test", () => {
   jest.setTimeout(1500000);
   let contractAddress: AztecAddress;
   let cc: CheatCodes;

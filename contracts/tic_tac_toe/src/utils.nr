@@ -2,7 +2,6 @@ use dep::aztec::{
     context::PrivateContext,
     oracle::{
         get_public_key::get_public_key,
-        debug_log::debug_log_format,
     },
     protocol_types::{
         abis::function_selector::FunctionSelector,
@@ -33,18 +32,10 @@ pub fn can_play(game: BoardNote, sender: Field) {
         (game.host.to_field() == sender) | (game.challenger.to_field() == sender), "Sender is not challenger or host."
     );
 
-    // debug_log_format("sender: {0}", [sender]);
-    // debug_log_format("host: {0}", [game.host.to_field()]);
-    // debug_log_format("challenger: {0}", [game.challenger.to_field()]);
-
     // Check that it is player's turn. Event turn means it is host's turn. Odd is challenger
     if ((game.turn & 1) == 0) {
-        // debug_log_format("host case: {0}", [game.turn as Field]);
-        // debug_log_format("modulo: {0}", [(game.turn % 2) as Field]);
         assert(sender == game.host.to_field(), "Only host can move.");
     } else {
-        // debug_log_format("guest case: {0}", [game.turn as Field]);
-        // debug_log_format("modulo: {0}", [(game.turn % 2) as Field]);
         assert(sender == game.challenger.to_field(), "Only challenger can move.");
     }
 }
@@ -183,4 +174,11 @@ fn pop_capsule_oracle() -> [Field; CAPSULE_SIZE] {}
 
 unconstrained pub fn pop_capsule() -> [Field; CAPSULE_SIZE] {
     pop_capsule_oracle()
+}
+
+#[oracle(getRandomField)]
+fn rand_oracle() -> Field {}
+
+unconstrained pub fn rand() -> Field {
+    rand_oracle()
 }

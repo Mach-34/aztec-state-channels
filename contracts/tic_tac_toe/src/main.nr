@@ -16,7 +16,6 @@ contract TicTacToe {
             utils as note_utils
         },
         oracle::{
-            debug_log::debug_log_format,
             get_public_key::get_public_key
         },
         protocol_types::{
@@ -50,12 +49,6 @@ contract TicTacToe {
                 GAME_NOTE_LEN,
                 GAME_SERIALIZED_LEN
             },
-            // timeout::{
-            //     Timeout,
-            //     TimeoutMethods,
-            //     TIMEOUT_SERIALIZED_LEN,
-            //     TIMEOUT_WINDOW
-            // }
         },
         utils::{ 
             can_play, 
@@ -65,7 +58,7 @@ contract TicTacToe {
             encode_move_msg,
             legal_move,
             get_game_turn,
-            // open_channel,
+            rand,
             pop_capsule,
             verify_game_start,
             TIMEOUT_WINDOW
@@ -130,7 +123,7 @@ contract TicTacToe {
         let note_hash = board.compute_note_hash();
 
         storage.boards.at(game_index).remove(board);
-        board.pending_timeout = false;
+        board.timeout_nullifier = 0;
         board.over = true;
         storage.boards.at(game_index).insert(&mut board, true);
         context.call_public_function(
@@ -161,7 +154,7 @@ contract TicTacToe {
         } else {
             board.moves[coord] = 4;
         }
-        board.pending_timeout = false;
+        board.timeout_nullifier = 0;
         let game_over = check_game_over(board);
 
         context.call_public_function(
@@ -234,10 +227,6 @@ contract TicTacToe {
         let timeout = turn[3] as bool;
         let mut game_over = false;
 
-        debug_log_format("Game host {0}", [board.host.to_field()]);
-        debug_log_format("Game challenger {0}", [board.challenger.to_field()]);
-        debug_log_format("Sender {0}", [sender]);
-
         can_play(board, sender); // Check that player is in game and it is their turn
         legal_move(board.moves, row, col); // Check legal move
 
@@ -256,7 +245,7 @@ contract TicTacToe {
         board.turn += 1;
 
         if (timeout) {
-            board.pending_timeout = true;
+            board.timeout_nullifier = rand();
             let note_hash = board.compute_note_hash();
             context.call_public_function(
                 context.this_address(),
@@ -294,24 +283,26 @@ contract TicTacToe {
         if (boards[0].is_some()) {
             board = boards[0].unwrap_unchecked();
             assert(!board.over, "Game has ended."); // If game is over then revert
-        } else {
-            // #### Open channel ####
-            context.call_private_function(
-                context.this_address(),
-                FunctionSelector::from_signature("open_channel(Field)"),
-                [game_id]
-            );
         }
 
         let mut end_condition = false;
 
-        for i in 0..2 {
-            if (!end_condition) {
-                end_condition = context.call_private_function(
+        for i in 0..3 {
+            if((i == 0) & boards[0].is_none()) {
+                // #### Open channel ####
+                context.call_private_function(
                     context.this_address(),
-                    FunctionSelector::from_signature("turn(Field)"),
+                    FunctionSelector::from_signature("open_channel(Field)"),
                     [game_id]
-                )[0] as bool;
+                );
+            } else {
+                if (!end_condition) {
+                    end_condition = context.call_private_function(
+                        context.this_address(),
+                        FunctionSelector::from_signature("turn(Field)"),
+                        [game_id]
+                    )[0] as bool;
+                }
             }
         }
 
