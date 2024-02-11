@@ -22,7 +22,8 @@ import { TicTacToeContractArtifact } from "../../src/artifacts/TicTacToe.js";
 type Move = {
   row: number;
   col: number;
-  player: AccountWalletWithPrivateKey;
+  sender: AccountWalletWithPrivateKey;
+  opponent: AccountWalletWithPrivateKey;
   timeout?: boolean;
 };
 
@@ -51,29 +52,33 @@ export const deserializeMoveSignature = (
 };
 
 export const genMoveMsg = (
+  senderAddress: AztecAddress,
   gameIndex: BigInt,
   turn: number,
   row: number,
   col: number
 ) => {
-  const moveMsg = new Uint8Array(35);
+  const moveMsg = new Uint8Array(67);
+  const addressBytes = Uint8Array.from(senderAddress.toBuffer());
   const gameIndexBytes = Uint8Array.from(
     Buffer.from(numToHex(gameIndex), "hex")
   );
-  moveMsg.set(gameIndexBytes, 0);
-  moveMsg.set([turn, row, col], 32);
+  moveMsg.set(addressBytes, 0);
+  moveMsg.set(gameIndexBytes, 32);
+  moveMsg.set([turn, row, col], 64);
   return moveMsg;
 };
 
 export const genSerializedMoveSignature = (
+  senderAddress: AztecAddress,
   gameIndex: BigInt,
   turn: number,
   row: number,
   col: number,
   privKey: GrumpkinPrivateKey
 ) => {
-  // Message is formed by concatenating game index, move row, and move column together
-  const moveMsg = genMoveMsg(gameIndex, turn, row, col);
+  // Message is formed by concatenating sender address, game index, move row, and move column together
+  const moveMsg = genMoveMsg(senderAddress, gameIndex, turn, row, col);
 
   const signature = signSchnorr(moveMsg, privKey);
 
@@ -151,23 +156,38 @@ export const prepareMoves = (
 ) => {
   return moves
     .map((move, index) => {
-      const privKey = move.player.getEncryptionPrivateKey();
-      const { s1, s2, s3 } = genSerializedMoveSignature(
+      const senderAddress = move.sender.getAddress();
+      const opponentPrivKey = move.opponent.getEncryptionPrivateKey();
+      const { s1: opponent_s1, s2: opponent_s2, s3: opponent_s3 } = genSerializedMoveSignature(
+        senderAddress,
         gameIndex,
         index + startIndex,
         move.row,
         move.col,
-        privKey
+        opponentPrivKey
       );
+
+      const senderPrivKey = move.sender.getEncryptionPrivateKey();
+      const { s1: sender_s1, s2: sender_s2, s3: sender_s3 } = genSerializedMoveSignature(
+        senderAddress,
+        gameIndex,
+        index + startIndex,
+        move.row,
+        move.col,
+        senderPrivKey
+      );
+
       return [
         Fr.fromString(numToHex(move.row)),
         Fr.fromString(numToHex(move.col)),
-        move.player.getAddress(),
-        s1,
-        s2,
-        s3,
+        senderAddress,
+        sender_s1,
+        sender_s2,
+        sender_s3,
+        opponent_s1,
+        opponent_s2,
+        opponent_s3,
         Fr.fromString(numToHex(move.timeout ? 1 : 0)),
-        Fr.fromString(numToHex(0)), // Open channel capsule requires length 8 so pad extra value
       ];
     })
     .reverse();
@@ -210,6 +230,9 @@ export const prepareOpenChannel = (
     bob_s1,
     bob_s2,
     bob_s3,
+    // Open channel capsule requires length 8 so pad extra value
+    Fr.fromString(numToHex(0)),
+    Fr.fromString(numToHex(0)),
   ];
 };
 
@@ -243,7 +266,8 @@ export const simulateTurn = async (
   await emptyCapsuleStack(contract);
   // build capsule for turn
   let capsuleMove = { row: move.row, col: move.col, player: account };
-  let moveCapsule = prepareMoves(gameIndex, [capsuleMove], move.turn)[0];
+  // let moveCapsule = prepareMoves(gameIndex, [capsuleMove], move.turn)[0];
+  let moveCapsule = prepareMoves(gameIndex, [], move.turn)[0];
   await pxe.addCapsule(moveCapsule);
   // get execution context
   let request = await contract.methods.turn(gameIndex).create();

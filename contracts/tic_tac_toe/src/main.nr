@@ -16,7 +16,8 @@ contract TicTacToe {
             utils as note_utils
         },
         oracle::{
-            get_public_key::get_public_key
+            get_public_key::get_public_key,
+            rand::rand
         },
         protocol_types::{
             address::AztecAddress,
@@ -55,7 +56,6 @@ contract TicTacToe {
             encode_move_msg,
             legal_move,
             get_game_turn,
-            rand,
             pop_capsule,
             verify_game_start,
             TIMEOUT_WINDOW
@@ -209,7 +209,7 @@ contract TicTacToe {
         let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
         let mut board = boards[0].unwrap_unchecked();
         // Pop next move off of capsule
-        let turn = get_game_turn(game_id, board.turn);
+        let turn = get_game_turn(board, game_id);
         let row = turn[0] as u8;
         let col = turn[1] as u8;
         let sender = turn[2];
@@ -408,21 +408,21 @@ contract TicTacToe {
         pop_capsule()
     }
 
-    unconstrained fn test_move_signature(
-        account: AztecAddress,
-        game_index: Field,
-        turn: u8,
-        row: u8,
-        col: u8,
-        s_1: Field,
-        s_2: Field,
-        s_3: Field
-    ) -> pub bool {
-        let msg = encode_move_msg(game_index, turn, row, col);
-        let signature = deserialize_signature(s_1, s_2, s_3);
-        let pubkey = get_public_key(account);
-        verify_signature(pubkey.x, pubkey.y, signature, msg)
-    }
+    // unconstrained fn test_move_signature(
+    //     account: AztecAddress,
+    //     game_index: Field,
+    //     turn: u8,
+    //     row: u8,
+    //     col: u8,
+    //     s_1: Field,
+    //     s_2: Field,
+    //     s_3: Field
+    // ) -> pub bool {
+    //     let msg = encode_move_msg(game_index, turn, row, col);
+    //     let signature = deserialize_signature(s_1, s_2, s_3);
+    //     let pubkey = get_public_key(account);
+    //     verify_signature(pubkey.x, pubkey.y, signature, msg)
+    // }
 
     unconstrained fn compute_note_hash_and_nullifier(
         contract_address: AztecAddress,

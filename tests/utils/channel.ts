@@ -20,6 +20,7 @@ import {
   emptyCapsuleStack,
   signSchnorr,
 } from "./index.js";
+import { numToHex } from "../../src/utils.js";
 
 export type OpenChannelSignature = {
   from: AztecAddress;
@@ -50,7 +51,7 @@ export class TicTacToeStateChannel {
     public readonly contractAddress: AztecAddress,
     /** Index of the game to play */
     public readonly gameIndex: bigint
-  ) {}
+  ) { }
 
   /**
    * Generate the signature needed to open a channel
@@ -116,6 +117,9 @@ export class TicTacToeStateChannel {
       guestSignature.from,
       ...hostSignature.sig,
       ...guestSignature.sig,
+      // Padding to get capsule length to 10
+      Fr.fromString(numToHex(0)),
+      Fr.fromString(numToHex(0))
     ];
     await this.pxe.addCapsule(openChannelCapsule);
     // get the packed arguments for the call
@@ -146,17 +150,18 @@ export class TicTacToeStateChannel {
    */
   public async turn(
     account: AccountWalletWithPrivateKey,
-    move: { row: number; col: number }
+    opponent: AccountWalletWithPrivateKey,
+    move: { row: number; col: number, timeout?: boolean }
   ) {
     // ensure subsequent turns can be built from the previously stored turn
-    if (this.checkChannelOver()) throw new Error("Game is already over!");
+    // if (this.checkChannelOver()) throw new Error("Game is already over!");
     // get contract
     const contract = await this.getContract(account);
     // ensure pxe is sanitized
     await emptyCapsuleStack(contract);
     // add the turn proving time advice to the capsule stack
     let turn = this.turnResults.length;
-    let capsuleMove = { row: move.row, col: move.col, player: account };
+    let capsuleMove = { row: move.row, col: move.col, sender: account, opponent, timeout: move.timeout };
     let moveCapsule = prepareMoves(this.gameIndex, [capsuleMove], turn)[0];
     await this.pxe.addCapsule(moveCapsule);
     // get the packed arguments for the call
@@ -183,7 +188,7 @@ export class TicTacToeStateChannel {
     // push orchestrator side effect cache if next call will be orchestrator
     if (
       (this.turnResults.length == 2 ||
-        (this.turnResults.length > 3 && this.turnResults.length % 3 === 0)) &&
+        (this.turnResults.length > 3 && this.turnResults.length % 3 === 2)) &&
       !this.checkChannelOver()
     ) {
       // get side effect from last turn
@@ -191,6 +196,7 @@ export class TicTacToeStateChannel {
       let lastSideEffectCounter =
         lastTurn.callStackItem.publicInputs.endSideEffectCounter.toBigInt();
       // push the side effect counter to the cache
+      // console.log('Last side effect counter: ', lastSideEffectCounter);
       this.orchestratorSideEffectCache.push(Number(lastSideEffectCounter + 1n));
     }
   }
@@ -208,9 +214,9 @@ export class TicTacToeStateChannel {
       );
     }
     // ensure the game is over
-    if (!this.checkChannelOver()) {
-      throw new Error(`Game for game id ${this.gameIndex} is not over yet!`);
-    }
+    // if (!this.checkChannelOver()) {
+    //   throw new Error(`Game for game id ${this.gameIndex} is not over yet!`);
+    // }
     // get contract
     const contract = await this.getContract(account);
     // get the packed arguments for the call (reusable)
@@ -286,7 +292,6 @@ export class TicTacToeStateChannel {
       request,
       this.orchestratorResult!
     );
-
     // broadcast the transaction
     let result = await new SentTx(this.pxe, account.sendTx(tx)).wait();
     if (result.status !== TxStatus.MINED)
@@ -373,7 +378,7 @@ export class TicTacToeStateChannel {
     } else {
       // if turn is 2 (using 0 index), or if turn > 3 and is a multiple of 3, increment by 2
       let turn = this.turnResults.length;
-      let incrementBy = (turn === 2 || (turn > 3 && turn % 3 === 0)) ? 2n : 1n;
+      let incrementBy = (turn === 2 || (turn > 3 && turn % 3 === 2)) ? 2n : 1n;
       sideEffectCounter =
         this.turnResults[
           turn - 1

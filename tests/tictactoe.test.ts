@@ -64,7 +64,35 @@ xdescribe("Tic Tac Toe", () => {
     // Clear out capsule stack each time tests are ran
     try {
       await emptyCapsuleStack(deployed);
-    } catch (err) {}
+    } catch (err) { }
+  });
+
+  xtest("Test two move signatures", async () => {
+    const contract = await Contract.at(
+      contractAddress,
+      TicTacToeContractArtifact,
+      accounts.alice
+    );
+
+    const openChannelCapsule = prepareOpenChannel(
+      accounts.alice,
+      accounts.bob
+    );
+
+    const moves = [
+      { row: 0, col: 0, sender: accounts.alice, opponent: accounts.bob },
+      { row: 1, col: 1, sender: accounts.bob, opponent: accounts.alice },
+      { row: 0, col: 1, sender: accounts.alice, opponent: accounts.bob },
+      { row: 2, col: 2, sender: accounts.bob, opponent: accounts.alice },
+      { row: 0, col: 2, sender: accounts.alice, opponent: accounts.bob },
+    ];
+    const prepared = prepareMoves(gameIndex, moves);
+    for (const move of prepared) {
+      await pxe.addCapsule(move);
+    }
+    await pxe.addCapsule(openChannelCapsule);
+
+    await contract.methods.orchestrator(gameIndex).send().wait();
   });
 
   describe("Test state channel over orchestrator function", () => {
@@ -80,7 +108,7 @@ xdescribe("Tic Tac Toe", () => {
       );
       try {
         await emptyCapsuleStack(contract);
-      } catch (err) {}
+      } catch (err) { }
     });
 
     describe("Test game creation", () => {
@@ -125,6 +153,8 @@ xdescribe("Tic Tac Toe", () => {
           charlie_s1,
           charlie_s2,
           charlie_s3,
+          Fr.fromString(numToHex(0)),
+          Fr.fromString(numToHex(0))
         ]);
 
         const call = contract.methods.orchestrator(
@@ -141,7 +171,7 @@ xdescribe("Tic Tac Toe", () => {
     });
 
     describe("Test gameplay over state channel", () => {
-      test("Transaction should fail when private key other than player's is used to sign move", async () => {
+      test("Transaction should fail when opponent move signature is incorrect", async () => {
         const contract = await Contract.at(
           contractAddress,
           TicTacToeContractArtifact,
@@ -149,7 +179,7 @@ xdescribe("Tic Tac Toe", () => {
         );
         // Create dummy move to pop capsule once
         const prepared = prepareMoves(gameIndex, [
-          { row: 2, col: 0, player: accounts.alice },
+          { row: 2, col: 0, sender: accounts.alice, opponent: accounts.bob },
         ]);
 
         const openChannelCapsule = prepareOpenChannel(
@@ -157,25 +187,78 @@ xdescribe("Tic Tac Toe", () => {
           accounts.bob
         );
 
-        // Sign move as Charlie and replace with Alice's serialized signature
-        const charliePrivkey = accounts.charlie.getEncryptionPrivateKey();
-        const { s1, s2, s3 } = genSerializedMoveSignature(
+        const alicePrivkey = accounts.alice.getEncryptionPrivateKey();
+        const { s1: alice_s1, s2: alice_s2, s3: alice_s3 } = genSerializedMoveSignature(
+          accounts.alice.getAddress(),
           gameIndex,
-          1,
+          0,
+          2,
+          0,
+          alicePrivkey
+        );
+
+        // Sign move as Charlie instead of Bob
+        const charliePrivkey = accounts.charlie.getEncryptionPrivateKey();
+        const { s1: charlie_s1, s2: charlie_s2, s3: charlie_s3 } = genSerializedMoveSignature(
+          accounts.alice.getAddress(),
+          gameIndex,
+          0,
           2,
           0,
           charliePrivkey
         );
 
-        prepared[0][3] = s1;
-        prepared[0][4] = s2;
-        prepared[0][5] = s3;
+        prepared[0][3] = alice_s1;
+        prepared[0][4] = alice_s2;
+        prepared[0][5] = alice_s3;
+        prepared[0][6] = charlie_s1;
+        prepared[0][7] = charlie_s2;
+        prepared[0][8] = charlie_s3;
 
         await pxe.addCapsule(prepared[0]);
         await pxe.addCapsule(openChannelCapsule);
         const call = contract.methods.orchestrator(gameIndex);
         await expect(call.simulate()).rejects.toThrowError(
-          /Move signature could not be verified./
+          /Could not verify opponent signature./
+        );
+      });
+
+      test("Transaction should fail when sender move signature is incorrect", async () => {
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.alice
+        );
+        // Create dummy move to pop capsule once
+        const prepared = prepareMoves(gameIndex, [
+          { row: 2, col: 0, sender: accounts.alice, opponent: accounts.bob },
+        ]);
+
+        const openChannelCapsule = prepareOpenChannel(
+          accounts.alice,
+          accounts.bob
+        );
+
+
+        const alicePrivkey = accounts.alice.getEncryptionPrivateKey();
+        const { s1: alice_s1, s2: alice_s2, s3: alice_s3 } = genSerializedMoveSignature(
+          accounts.bob.getAddress(), // Sign with Bob as sender instead of Alice
+          gameIndex,
+          0,
+          2,
+          0,
+          alicePrivkey
+        );
+
+        prepared[0][3] = alice_s1;
+        prepared[0][4] = alice_s2;
+        prepared[0][5] = alice_s3;
+
+        await pxe.addCapsule(prepared[0]);
+        await pxe.addCapsule(openChannelCapsule);
+        const call = contract.methods.orchestrator(gameIndex);
+        await expect(call.simulate()).rejects.toThrowError(
+          /Could not verify sender signature./
         );
       });
 
@@ -187,7 +270,7 @@ xdescribe("Tic Tac Toe", () => {
         );
         // Create dummy move to pop capsule once
         const prepared = prepareMoves(gameIndex, [
-          { row: 2, col: 0, player: accounts.alice },
+          { row: 2, col: 0, sender: accounts.alice, opponent: accounts.bob },
         ]);
 
         const openChannelCapsule = prepareOpenChannel(
@@ -203,7 +286,7 @@ xdescribe("Tic Tac Toe", () => {
 
         const call = contract.methods.orchestrator(gameIndex);
         await expect(call.simulate()).rejects.toThrowError(
-          /Move signature could not be verified./
+          /Could not verify opponent signature./
         );
       });
 
@@ -220,11 +303,11 @@ xdescribe("Tic Tac Toe", () => {
         );
 
         const moves = [
-          { row: 2, col: 0, player: accounts.alice },
-          { row: 1, col: 0, player: accounts.bob },
-          { row: 0, col: 0, player: accounts.alice },
-          { row: 0, col: 1, player: accounts.bob },
-          { row: 2, col: 2, player: accounts.charlie },
+          { row: 2, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 1, col: 0, sender: accounts.bob, opponent: accounts.alice },
+          { row: 0, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 0, col: 1, sender: accounts.bob, opponent: accounts.alice },
+          { row: 2, col: 2, sender: accounts.charlie, opponent: accounts.bob },
         ];
 
         const prepared = prepareMoves(gameIndex, moves);
@@ -253,8 +336,8 @@ xdescribe("Tic Tac Toe", () => {
         );
 
         const moves = [
-          { row: 2, col: 0, player: accounts.alice },
-          { row: 4, col: 1, player: accounts.bob },
+          { row: 2, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 4, col: 1, sender: accounts.bob, opponent: accounts.alice },
         ];
 
         const prepared = prepareMoves(gameIndex, moves);
@@ -281,7 +364,7 @@ xdescribe("Tic Tac Toe", () => {
           accounts.bob
         );
 
-        const moves = [{ row: 2, col: 5, player: accounts.alice }];
+        const moves = [{ row: 2, col: 5, sender: accounts.alice, opponent: accounts.bob }];
 
         const prepared = prepareMoves(gameIndex, moves);
 
@@ -309,8 +392,8 @@ xdescribe("Tic Tac Toe", () => {
         );
 
         const moves = [
-          { row: 2, col: 2, player: accounts.alice },
-          { row: 2, col: 2, player: accounts.bob },
+          { row: 2, col: 2, sender: accounts.alice, opponent: accounts.bob },
+          { row: 2, col: 2, sender: accounts.bob, opponent: accounts.alice },
         ];
 
         const prepared = prepareMoves(gameIndex, moves);
@@ -339,10 +422,10 @@ xdescribe("Tic Tac Toe", () => {
         );
 
         const moves = [
-          { row: 0, col: 0, player: accounts.alice },
-          { row: 1, col: 1, player: accounts.bob },
-          { row: 0, col: 1, player: accounts.alice },
-          { row: 0, col: 2, player: accounts.alice },
+          { row: 0, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 1, col: 1, sender: accounts.bob, opponent: accounts.alice },
+          { row: 0, col: 1, sender: accounts.alice, opponent: accounts.bob },
+          { row: 0, col: 2, sender: accounts.alice, opponent: accounts.bob },
         ];
 
         const prepared = prepareMoves(gameIndex, moves);
@@ -371,11 +454,11 @@ xdescribe("Tic Tac Toe", () => {
         );
 
         const moves = [
-          { row: 0, col: 0, player: accounts.alice },
-          { row: 1, col: 1, player: accounts.bob },
-          { row: 0, col: 1, player: accounts.alice },
-          { row: 2, col: 2, player: accounts.bob },
-          { row: 0, col: 2, player: accounts.alice },
+          { row: 0, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 1, col: 1, sender: accounts.bob, opponent: accounts.alice },
+          { row: 0, col: 1, sender: accounts.alice, opponent: accounts.bob },
+          { row: 2, col: 2, sender: accounts.bob, opponent: accounts.alice },
+          { row: 0, col: 2, sender: accounts.alice, opponent: accounts.bob },
         ];
 
         const prepared = prepareMoves(gameIndex, moves);
@@ -392,7 +475,7 @@ xdescribe("Tic Tac Toe", () => {
 
         const call = contract.methods.orchestrator(gameIndex);
         await expect(call.simulate()).rejects.toThrowError(
-          /Move signature could not be verified./
+          /Could not verify opponent signature./
         );
       });
 
@@ -420,11 +503,11 @@ xdescribe("Tic Tac Toe", () => {
         );
 
         const moves = [
-          { row: 0, col: 0, player: accounts.alice },
-          { row: 1, col: 1, player: accounts.bob },
-          { row: 0, col: 1, player: accounts.alice },
-          { row: 2, col: 2, player: accounts.bob },
-          { row: 0, col: 2, player: accounts.alice },
+          { row: 0, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 1, col: 1, sender: accounts.bob, opponent: accounts.alice },
+          { row: 0, col: 1, sender: accounts.alice, opponent: accounts.bob },
+          { row: 2, col: 2, sender: accounts.bob, opponent: accounts.alice },
+          { row: 0, col: 2, sender: accounts.alice, opponent: accounts.bob },
         ];
         const prepared = prepareMoves(gameIndex, moves);
         for (const move of prepared) {
@@ -447,7 +530,7 @@ xdescribe("Tic Tac Toe", () => {
           accounts.alice
         );
 
-        const moves = [{ row: 1, col: 2, player: accounts.bob }];
+        const moves = [{ row: 1, col: 2, sender: accounts.bob, opponent: accounts.alice }];
 
         const prepared = prepareMoves(gameIndex, moves);
         await pxe.addCapsule(prepared[0]);
@@ -469,15 +552,15 @@ xdescribe("Tic Tac Toe", () => {
         );
 
         const moves = [
-          { row: 0, col: 0, player: accounts.alice },
-          { row: 0, col: 1, player: accounts.bob },
-          { row: 0, col: 2, player: accounts.alice },
-          { row: 1, col: 1, player: accounts.bob },
-          { row: 1, col: 0, player: accounts.alice },
-          { row: 1, col: 2, player: accounts.bob },
-          { row: 2, col: 1, player: accounts.alice },
-          { row: 2, col: 0, player: accounts.bob },
-          { row: 2, col: 2, player: accounts.alice },
+          { row: 0, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 0, col: 1, sender: accounts.bob, opponent: accounts.alice },
+          { row: 0, col: 2, sender: accounts.alice, opponent: accounts.bob },
+          { row: 1, col: 1, sender: accounts.bob, opponent: accounts.alice },
+          { row: 1, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 1, col: 2, sender: accounts.bob, opponent: accounts.alice },
+          { row: 2, col: 1, sender: accounts.alice, opponent: accounts.bob },
+          { row: 2, col: 0, sender: accounts.bob, opponent: accounts.alice },
+          { row: 2, col: 2, sender: accounts.alice, opponent: accounts.bob },
         ];
         const prepared = prepareMoves(gameIndex, moves);
         for (const move of prepared) {
@@ -498,7 +581,7 @@ xdescribe("Tic Tac Toe", () => {
           TicTacToeContractArtifact,
           accounts.alice
         );
-        const moves = [{ row: 2, col: 0, player: accounts.bob }];
+        const moves = [{ row: 2, col: 0, sender: accounts.bob, opponent: accounts.alice }];
         const prepared = prepareMoves(gameIndex, moves);
         await pxe.addCapsule(prepared[0]);
         const call = contract.methods.orchestrator(gameIndex);
@@ -530,7 +613,7 @@ xdescribe("Tic Tac Toe", () => {
           accounts.alice
         );
         const moves = [
-          { row: 1, col: 1, player: accounts.alice, timeout: true },
+          { row: 1, col: 1, sender: accounts.alice, opponent: accounts.bob, timeout: true },
         ];
 
         const openChannelCapsule = prepareOpenChannel(
@@ -598,10 +681,10 @@ xdescribe("Tic Tac Toe", () => {
         );
 
         const moves = [
-          { row: 0, col: 0, player: accounts.alice },
-          { row: 2, col: 0, player: accounts.bob },
-          { row: 2, col: 1, player: accounts.alice },
-          { row: 2, col: 2, player: accounts.bob, timeout: true },
+          { row: 0, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 2, col: 0, sender: accounts.bob, opponent: accounts.alice },
+          { row: 2, col: 1, sender: accounts.alice, opponent: accounts.bob },
+          { row: 2, col: 2, sender: accounts.bob, opponent: accounts.alice, timeout: true },
         ];
 
         const prepared = prepareMoves(gameIndex, moves);
@@ -649,11 +732,11 @@ xdescribe("Tic Tac Toe", () => {
         );
 
         const moves = [
-          { row: 0, col: 0, player: accounts.alice },
-          { row: 2, col: 0, player: accounts.bob },
-          { row: 0, col: 1, player: accounts.alice },
-          { row: 2, col: 1, player: accounts.bob },
-          { row: 1, col: 0, player: accounts.alice, timeout: true },
+          { row: 0, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 2, col: 0, sender: accounts.bob, opponent: accounts.alice },
+          { row: 0, col: 1, sender: accounts.alice, opponent: accounts.bob },
+          { row: 2, col: 1, sender: accounts.bob, opponent: accounts.alice },
+          { row: 1, col: 0, sender: accounts.alice, opponent: accounts.bob, timeout: true },
         ];
 
         const prepared = prepareMoves(gameIndex, moves);
@@ -692,10 +775,10 @@ xdescribe("Tic Tac Toe", () => {
         );
 
         const moves = [
-          { row: 0, col: 0, player: accounts.alice },
-          { row: 2, col: 0, player: accounts.bob },
-          { row: 2, col: 1, player: accounts.alice },
-          { row: 2, col: 2, player: accounts.bob, timeout: true },
+          { row: 0, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 2, col: 0, sender: accounts.bob, opponent: accounts.alice },
+          { row: 2, col: 1, sender: accounts.alice, opponent: accounts.bob },
+          { row: 2, col: 2, sender: accounts.bob, opponent: accounts.alice, timeout: true },
         ];
 
         const prepared = prepareMoves(gameIndex, moves);
@@ -717,9 +800,9 @@ xdescribe("Tic Tac Toe", () => {
         expect(board.turn).toEqual(5n);
 
         const moves2 = [
-          { row: 1, col: 2, player: accounts.bob },
-          { row: 1, col: 0, player: accounts.alice },
-          { row: 0, col: 2, player: accounts.bob },
+          { row: 1, col: 2, sender: accounts.bob, opponent: accounts.alice },
+          { row: 1, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 0, col: 2, sender: accounts.bob, opponent: accounts.alice },
         ];
 
         const prepared2 = prepareMoves(gameIndex, moves2, moves.length + 1);
