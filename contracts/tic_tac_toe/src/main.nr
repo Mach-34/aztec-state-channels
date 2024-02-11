@@ -123,7 +123,7 @@ contract TicTacToe {
     }
 
     #[aztec(private)]
-    fn dispute_timeout(game_id: Field, row: u8, col: u8) {
+    fn answer_timeout(game_id: Field, row: u8, col: u8) {
         let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
         assert(boards[0].is_some(), "Game does not exist.");
         let mut board = boards[0].unwrap_unchecked();
@@ -148,7 +148,7 @@ contract TicTacToe {
 
         context.call_public_function(
             context.this_address(),
-            FunctionSelector::from_signature("dispute_timeout_public(Field)"),
+            FunctionSelector::from_signature("answer_timeout_public(Field)"),
             [prev_note_hash]
         );
 
@@ -317,7 +317,7 @@ contract TicTacToe {
         let trigger_timestamp = storage.timeouts.at(hash).read() as u64;
         assert(trigger_timestamp != 0, "Invactive timeout.");
         assert(
-            context.timestamp() as u64 >= trigger_timestamp + TIMEOUT_WINDOW, "Player can still dispute timeout."
+            context.timestamp() as u64 >= trigger_timestamp + TIMEOUT_WINDOW, "Player can still answer timeout."
         );
 
         // Set timestamp for timeout to 0
@@ -337,7 +337,7 @@ contract TicTacToe {
     }
 
     #[aztec(public)]
-    internal fn dispute_timeout_public(hash: Field) {
+    internal fn answer_timeout_public(hash: Field) {
         let trigger_timestamp = storage.timeouts.at(hash).read() as u64;
         assert(trigger_timestamp != 0, "Invactive timeout.");
         assert(
@@ -407,22 +407,6 @@ contract TicTacToe {
     unconstrained fn test_capsule() -> pub [Field; CAPSULE_SIZE] {
         pop_capsule()
     }
-
-    // unconstrained fn test_move_signature(
-    //     account: AztecAddress,
-    //     game_index: Field,
-    //     turn: u8,
-    //     row: u8,
-    //     col: u8,
-    //     s_1: Field,
-    //     s_2: Field,
-    //     s_3: Field
-    // ) -> pub bool {
-    //     let msg = encode_move_msg(game_index, turn, row, col);
-    //     let signature = deserialize_signature(s_1, s_2, s_3);
-    //     let pubkey = get_public_key(account);
-    //     verify_signature(pubkey.x, pubkey.y, signature, msg)
-    // }
 
     unconstrained fn compute_note_hash_and_nullifier(
         contract_address: AztecAddress,

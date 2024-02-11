@@ -643,7 +643,7 @@ xdescribe("Tic Tac Toe", () => {
         );
         const call = contract.methods.claim_timeout_win(gameIndex);
         await expect(call.simulate()).rejects.toThrowError(
-          /Player can still dispute timeout./
+          /Player can still answer timeout./
         );
       });
 
@@ -668,7 +668,7 @@ xdescribe("Tic Tac Toe", () => {
         );
       });
 
-      test("Disputed timeout should update state to next turn", async () => {
+      test("Answered timeout should update state to next turn", async () => {
         const contract = await Contract.at(
           contractAddress,
           TicTacToeContractArtifact,
@@ -701,12 +701,12 @@ xdescribe("Tic Tac Toe", () => {
           .view();
         const timestamp = await contract.methods.get_timeout(noteHash).view();
         expect(timestamp).not.toEqual(0n);
-        await contract.methods.dispute_timeout(gameIndex, 0, 1).send().wait();
+        await contract.methods.answer_timeout(gameIndex, 0, 1).send().wait();
         const board = await contract.methods.get_board(gameIndex).view();
         expect(board.turn).toEqual(5n);
       });
 
-      test("Win should not be claimmable after timeout is disputed", async () => {
+      test("Win should not be claimmable after timeout is answered", async () => {
         gameIndex--;
         const contract = await Contract.at(
           contractAddress,
@@ -719,7 +719,7 @@ xdescribe("Tic Tac Toe", () => {
         );
       });
 
-      test("Updated state in dispute timeout function should result in a game winner in some cases", async () => {
+      test("Updated state in answer timeout function should result in a game winner in some cases", async () => {
         const contract = await Contract.at(
           contractAddress,
           TicTacToeContractArtifact,
@@ -753,7 +753,7 @@ xdescribe("Tic Tac Toe", () => {
           accounts.bob
         );
         await bobContract.methods
-          .dispute_timeout(gameIndex, 2, 2)
+          .answer_timeout(gameIndex, 2, 2)
           .send()
           .wait();
         const board = await contract.methods.get_board(gameIndex).view();
@@ -762,7 +762,7 @@ xdescribe("Tic Tac Toe", () => {
         expect(game.winner.inner).toEqual(accounts.bob.getAddress().toBigInt());
       });
 
-      test("When timeout is disputed then game should be playable again to conclusion", async () => {
+      test("When timeout is answered then game should be playable again to conclusion", async () => {
         const contract = await Contract.at(
           contractAddress,
           TicTacToeContractArtifact,
@@ -795,7 +795,7 @@ xdescribe("Tic Tac Toe", () => {
           .view();
         const timestamp = await contract.methods.get_timeout(noteHash).view();
         expect(timestamp).not.toEqual(0n);
-        await contract.methods.dispute_timeout(gameIndex, 0, 1).send().wait();
+        await contract.methods.answer_timeout(gameIndex, 0, 1).send().wait();
         const board = await contract.methods.get_board(gameIndex).view();
         expect(board.turn).toEqual(5n);
 

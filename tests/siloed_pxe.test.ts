@@ -160,7 +160,7 @@ xdescribe("State Channel Test With Two PXEs", () => {
 
     xtest("Draw Game State Channel", async () => { });
 
-    xtest("Statechannel Timeout With No Dispute", async () => { });
-    xtest("Statechannel Timeout With Dispute", async () => { });
+    xtest("Statechannel Timeout With No Answer", async () => { });
+    xtest("Statechannel Timeout With Answer", async () => { });
   });
 });

@@ -7,7 +7,7 @@ global TIMEOUT_WINDOW = 30;
 
 struct Timeout {
     by: Field,
-    // 0: disputed, 1: active, 2: closed 
+    // 0: answered, 1: active, 2: closed 
     status: Field,
     timestamp: Field
 }

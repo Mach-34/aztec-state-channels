@@ -180,7 +180,7 @@ describe("State Channel Test", () => {
       expect(game.winner.inner).toEqual(0n);
     });
 
-    xtest("Statechannel Timeout With No Dispute", async () => {
+    xtest("Statechannel Timeout With No Answer", async () => {
       const stateChannel = new TicTacToeStateChannel(
         pxe,
         contractAddress,
@@ -232,7 +232,7 @@ describe("State Channel Test", () => {
       // );
     });
 
-    xtest("Statechannel Timeout With Dispute", async () => {
+    xtest("Statechannel Timeout With Answer", async () => {
 
       const stateChannel = new TicTacToeStateChannel(
         pxe,
@@ -275,8 +275,8 @@ describe("State Channel Test", () => {
       const timestamp = await contract.methods.get_timeout(noteHash).view();
       expect(timestamp).not.toEqual(0n);
 
-      // DISPUTE TIMEOUT
-      await contract.methods.dispute_timeout(gameIndex, 0, 0).send().wait();
+      // ANSWER TIMEOUT
+      await contract.methods.answer_timeout(gameIndex, 0, 0).send().wait();
       // Confirm board state incremented to next turn
       const board = await contract.methods.get_board(gameIndex).view();
       expect(board.turn).toEqual(3n);
