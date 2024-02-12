@@ -14,6 +14,7 @@ import { createAccount } from "@aztec/accounts/testing";
 import { TicTacToeContractArtifact } from "../src/artifacts/TicTacToe.js";
 import { emptyCapsuleStack, numToHex, signSchnorr } from "../src/utils.js";
 import {
+  deserializeMoveSignature,
   genSerializedMoveSignature,
   prepareMoves,
   prepareOpenChannel,
@@ -25,7 +26,7 @@ const {
   PXE_URL = "http://localhost:8080",
 } = process.env;
 
-xdescribe("Tic Tac Toe", () => {
+describe("Tic Tac Toe", () => {
   jest.setTimeout(1500000);
   let contractAddress: AztecAddress;
   let cc: CheatCodes;
@@ -111,7 +112,7 @@ xdescribe("Tic Tac Toe", () => {
       } catch (err) { }
     });
 
-    describe("Test game creation", () => {
+    xdescribe("Test game creation", () => {
       test("Game should fail to start if at least one signature is not valid", async () => {
         const aliceAddress = accounts.alice.getAddress().toBuffer();
         const bobAddress = accounts.bob.getAddress().toBuffer();
@@ -170,7 +171,7 @@ xdescribe("Tic Tac Toe", () => {
       });
     });
 
-    describe("Test gameplay over state channel", () => {
+    xdescribe("Test gameplay over state channel", () => {
       test("Transaction should fail when opponent move signature is incorrect", async () => {
         const contract = await Contract.at(
           contractAddress,
@@ -589,7 +590,7 @@ xdescribe("Tic Tac Toe", () => {
       });
     });
 
-    describe("Test timout function", () => {
+    xdescribe("Test timout function", () => {
       test("Trigger timeout and confirm it to be set at note hash", async () => {
         console.log(
           "trigger timeout selector: ",
@@ -820,5 +821,418 @@ xdescribe("Tic Tac Toe", () => {
         );
       });
     });
+
+    xdescribe("Test fraud claim in case of two moves made for the same turn", () => {
+      test("Signatures must be from same to turn for fraud win to be claimed", async () => {
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.charlie
+        );
+
+        const openChannelCapsule = prepareOpenChannel(
+          accounts.alice,
+          accounts.bob
+        );
+
+
+        const bobAddress = accounts.bob.getAddress();
+        const bobPrivkey = accounts.bob.getEncryptionPrivateKey();
+        // Sign two seperate moves for the same turn as bob
+        const firstMove = { row: 0, col: 1 };
+        const secondMove = { row: 1, col: 0 };
+
+        const { s1: first_s1, s2: first_s2, s3: first_s3 } = genSerializedMoveSignature(
+          bobAddress,
+          gameIndex,
+          1,
+          firstMove.row,
+          firstMove.col,
+          bobPrivkey
+        );
+        const firstSignature = deserializeMoveSignature(first_s1.toBigInt(), first_s2.toBigInt(), first_s3.toBigInt());
+
+        const { s1: second_s1, s2: second_s2, s3: second_s3 } = genSerializedMoveSignature(
+          bobAddress,
+          gameIndex,
+          1,
+          firstMove.row,
+          firstMove.col,
+          bobPrivkey
+        );
+
+        const secondSignature = deserializeMoveSignature(second_s1.toBigInt(), second_s2.toBigInt(), second_s3.toBigInt());
+
+        await pxe.addCapsule(openChannelCapsule);
+
+        const call = contract.methods.claim_fraud_win(
+          gameIndex,
+          1,
+          [firstMove.row, firstMove.col],
+          [secondMove.row, secondMove.col],
+          firstSignature,
+          secondSignature
+        );
+        await expect(call.simulate()).rejects.toThrowError(
+          /Sender is not host or challenger./
+        );
+      });
+
+      test("Fraud win cannot be claimed with one of the signatures being from a different turn", async () => {
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.alice
+        );
+
+        const openChannelCapsule = prepareOpenChannel(
+          accounts.alice,
+          accounts.bob
+        );
+
+
+        const bobAddress = accounts.bob.getAddress();
+        const bobPrivkey = accounts.bob.getEncryptionPrivateKey();
+        // Sign two seperate moves for the same turn as bob
+        const firstMove = { row: 0, col: 1 };
+        const secondMove = { row: 1, col: 0 };
+
+        const { s1: first_s1, s2: first_s2, s3: first_s3 } = genSerializedMoveSignature(
+          bobAddress,
+          gameIndex,
+          1,
+          firstMove.row,
+          firstMove.col,
+          bobPrivkey
+        );
+        const firstSignature = deserializeMoveSignature(first_s1.toBigInt(), first_s2.toBigInt(), first_s3.toBigInt());
+
+        const { s1: second_s1, s2: second_s2, s3: second_s3 } = genSerializedMoveSignature(
+          bobAddress,
+          gameIndex,
+          3,
+          firstMove.row,
+          firstMove.col,
+          bobPrivkey
+        );
+
+        const secondSignature = deserializeMoveSignature(second_s1.toBigInt(), second_s2.toBigInt(), second_s3.toBigInt());
+
+        await pxe.addCapsule(openChannelCapsule);
+
+        const call = contract.methods.claim_fraud_win(
+          gameIndex,
+          1,
+          [firstMove.row, firstMove.col],
+          [secondMove.row, secondMove.col],
+          firstSignature,
+          secondSignature
+        );
+        await expect(call.simulate()).rejects.toThrowError(
+          /One of the signatures provided was not valid./
+        );
+      });
+
+      test("Fraud win cannot be claimed if the signatures have been generated by different accounts", async () => {
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.alice
+        );
+
+        const openChannelCapsule = prepareOpenChannel(
+          accounts.alice,
+          accounts.bob
+        );
+
+
+        const alicePrivkey = accounts.alice.getEncryptionPrivateKey();
+        const bobAddress = accounts.bob.getAddress();
+        const bobPrivkey = accounts.bob.getEncryptionPrivateKey();
+        // Sign two seperate moves for the same turn as bob
+        const firstMove = { row: 0, col: 1 };
+        const secondMove = { row: 1, col: 0 };
+
+        const { s1: first_s1, s2: first_s2, s3: first_s3 } = genSerializedMoveSignature(
+          bobAddress,
+          gameIndex,
+          1,
+          firstMove.row,
+          firstMove.col,
+          bobPrivkey
+        );
+        const firstSignature = deserializeMoveSignature(first_s1.toBigInt(), first_s2.toBigInt(), first_s3.toBigInt());
+
+        const { s1: second_s1, s2: second_s2, s3: second_s3 } = genSerializedMoveSignature(
+          bobAddress,
+          gameIndex,
+          1,
+          firstMove.row,
+          firstMove.col,
+          alicePrivkey
+        );
+
+        const secondSignature = deserializeMoveSignature(second_s1.toBigInt(), second_s2.toBigInt(), second_s3.toBigInt());
+
+        await pxe.addCapsule(openChannelCapsule);
+
+        const call = contract.methods.claim_fraud_win(
+          gameIndex,
+          1,
+          [firstMove.row, firstMove.col],
+          [secondMove.row, secondMove.col],
+          firstSignature,
+          secondSignature
+        );
+        await expect(call.simulate()).rejects.toThrowError(
+          /One of the signatures provided was not valid./
+        );
+      });
+
+      test("Proof of dual signatures for the same turn signed by the same party will result in game win be awarded to victim", async () => {
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.alice
+        );
+
+        const openChannelCapsule = prepareOpenChannel(
+          accounts.alice,
+          accounts.bob
+        );
+
+        const bobAddress = accounts.bob.getAddress();
+        const bobPrivkey = accounts.bob.getEncryptionPrivateKey();
+        // Sign two seperate moves for the same turn as bob
+        const firstMove = { row: 0, col: 1 };
+        const secondMove = { row: 1, col: 0 };
+
+        const { s1: first_s1, s2: first_s2, s3: first_s3 } = genSerializedMoveSignature(
+          bobAddress,
+          gameIndex,
+          1,
+          firstMove.row,
+          firstMove.col,
+          bobPrivkey
+        );
+        const firstSignature = deserializeMoveSignature(first_s1.toBigInt(), first_s2.toBigInt(), first_s3.toBigInt());
+
+        const { s1: second_s1, s2: second_s2, s3: second_s3 } = genSerializedMoveSignature(
+          bobAddress,
+          gameIndex,
+          1,
+          secondMove.row,
+          secondMove.col,
+          bobPrivkey
+        );
+
+        const secondSignature = deserializeMoveSignature(second_s1.toBigInt(), second_s2.toBigInt(), second_s3.toBigInt());
+
+        await pxe.addCapsule(openChannelCapsule);
+
+        await contract.methods.claim_fraud_win(
+          gameIndex,
+          1,
+          [firstMove.row, firstMove.col],
+          [secondMove.row, secondMove.col],
+          firstSignature,
+          secondSignature
+        ).send().wait();
+
+        const board = await contract.methods.get_board(gameIndex).view();
+        expect(board.over).toEqual(true);
+
+        const game = await contract.methods.get_game(gameIndex).view();
+        expect(game.winner.inner).toEqual(
+          accounts.alice.getAddress().toBigInt()
+        );
+      });
+
+      test("Moves submitted upon fraud win will revert now that game has eneded", async () => {
+        gameIndex--;
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.alice
+        );
+
+        const moves = [
+          { row: 0, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 1, col: 0, sender: accounts.bob, opponent: accounts.alice, timeout: true }
+        ];
+
+        const prepared = prepareMoves(gameIndex, moves);
+        for (const move of prepared) {
+          await pxe.addCapsule(move);
+        }
+
+        const call = contract.methods.orchestrator(gameIndex);
+        await expect(call.simulate()).rejects.toThrowError(/Game has ended./);
+      });
+    });
+
+    describe("Test fraudulent timeout dispute", () => {
+      test("Transaction should revert if game does not exists", async () => {
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.bob
+        );
+
+        const call = contract.methods.dispute_timeout(gameIndex + 100n, 0, new Uint8Array(64), accounts.alice.getAddress(), [0, 0]);
+        await expect(call.simulate()).rejects.toThrowError(
+          /Game does not exist./
+        );
+      });
+
+      test("Timeout cannot be disputed with a signature over a turn earlier than the turn the timeout was triggered", async () => {
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.alice
+        );
+
+        const openChannelCapsule = prepareOpenChannel(
+          accounts.alice,
+          accounts.bob
+        );
+
+        const moves = [
+          { row: 0, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 0, col: 1, sender: accounts.bob, opponent: accounts.alice },
+          { row: 0, col: 2, sender: accounts.alice, opponent: accounts.bob },
+          { row: 1, col: 1, sender: accounts.bob, opponent: accounts.alice, timeout: true },
+        ];
+
+        const prepared = prepareMoves(gameIndex, moves);
+        for (const move of prepared) {
+          await pxe.addCapsule(move);
+        }
+        await pxe.addCapsule(openChannelCapsule);
+
+        const signature = deserializeMoveSignature(
+          prepared[2][3].toBigInt(),
+          prepared[2][4].toBigInt(),
+          prepared[2][5].toBigInt()
+        );
+
+        await contract.methods.orchestrator(gameIndex).send().wait();
+
+        const call = contract.methods.dispute_timeout(gameIndex, 2, signature, accounts.alice.getAddress(), [moves[2].row, moves[2].col]);
+        await expect(call.simulate()).rejects.toThrowError(
+          /Cannot dispute a timeout with a turn prior to turn it was triggered on./
+        );
+      });
+
+      test("Timeout cannot be disputed with a signature signed by an unrelated party", async () => {
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.alice
+        );
+
+        const openChannelCapsule = prepareOpenChannel(
+          accounts.alice,
+          accounts.bob
+        );
+
+        const moves = [
+          { row: 0, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 0, col: 1, sender: accounts.bob, opponent: accounts.alice },
+          { row: 0, col: 2, sender: accounts.alice, opponent: accounts.bob },
+          { row: 1, col: 1, sender: accounts.bob, opponent: accounts.alice, timeout: true },
+        ];
+
+        const prepared = prepareMoves(gameIndex, moves);
+        for (const move of prepared) {
+          await pxe.addCapsule(move);
+        }
+        await pxe.addCapsule(openChannelCapsule);
+
+
+        const nextMove = { row: 2, col: 2 };
+
+        const { s1, s2, s3 } = genSerializedMoveSignature(
+          accounts.alice.getAddress(),
+          gameIndex,
+          4,
+          nextMove.row,
+          nextMove.col,
+          accounts.charlie.getEncryptionPrivateKey()
+        );
+
+        const signature = deserializeMoveSignature(s1.toBigInt(), s2.toBigInt(), s3.toBigInt());
+
+        await contract.methods.orchestrator(gameIndex).send().wait();
+
+        const call = contract.methods.dispute_timeout(gameIndex, 4, signature, accounts.alice.getAddress(), [nextMove.row, nextMove.col]);
+        await expect(call.simulate()).rejects.toThrowError(
+          /Invalid signature./
+        );
+      });
+
+      test("Timeout should be disputed if player provides evidence that opponent has advanced state beyond current timeout turn", async () => {
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.alice
+        );
+
+        const openChannelCapsule = prepareOpenChannel(
+          accounts.alice,
+          accounts.bob
+        );
+
+        const moves = [
+          { row: 0, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 0, col: 1, sender: accounts.bob, opponent: accounts.alice },
+          { row: 0, col: 2, sender: accounts.alice, opponent: accounts.bob },
+          { row: 1, col: 1, sender: accounts.bob, opponent: accounts.alice, timeout: true },
+        ];
+
+        const prepared = prepareMoves(gameIndex, moves);
+        for (const move of prepared) {
+          await pxe.addCapsule(move);
+        }
+        await pxe.addCapsule(openChannelCapsule);
+
+
+        const nextMove = { row: 2, col: 2 };
+
+        const { s1, s2, s3 } = genSerializedMoveSignature(
+          accounts.alice.getAddress(),
+          gameIndex,
+          4,
+          nextMove.row,
+          nextMove.col,
+          accounts.bob.getEncryptionPrivateKey()
+        );
+
+        const signature = deserializeMoveSignature(s1.toBigInt(), s2.toBigInt(), s3.toBigInt());
+
+        await contract.methods.orchestrator(gameIndex).send().wait();
+
+        const noteHash = await contract.methods
+          .get_game_note_hash(gameIndex)
+          .view();
+        const timestamp = await contract.methods.get_timeout(noteHash).view();
+        expect(timestamp).not.toEqual(0n);
+
+        await contract.methods.dispute_timeout(gameIndex, 4, signature, accounts.alice.getAddress(), [nextMove.row, nextMove.col]).send().wait();
+
+        const board = await contract.methods.get_board(gameIndex).view();
+        expect(board.over).toEqual(true);
+        const game = await contract.methods.get_game(gameIndex).view();
+        expect(game.winner.inner).toEqual(
+          accounts.alice.getAddress().toBigInt()
+        );
+        const timestampAfterDispute = await contract.methods.get_timeout(noteHash).view();
+        expect(timestampAfterDispute).toEqual(0n);
+      });
+
+      xtest("Transaction following dispute should revert", async () => {
+        // TODO
+      })
+    })
   });
 });

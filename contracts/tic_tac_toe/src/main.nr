@@ -102,27 +102,6 @@ contract TicTacToe {
     fn constructor() {}
 
     #[aztec(private)]
-    fn claim_timeout_win(game_index: Field) {
-        // Load in board
-        let boards = storage.boards.at(game_index).get_notes(NoteGetterOptions::new());
-        assert(boards[0].is_some(), "Game does not exist.");
-
-        let mut board = boards[0].unwrap_unchecked();
-
-        let note_hash = board.compute_note_hash();
-
-        storage.boards.at(game_index).remove(board);
-        board.timeout_nullifier = 0;
-        board.over = true;
-        storage.boards.at(game_index).insert(&mut board, true);
-        context.call_public_function(
-            context.this_address(),
-            FunctionSelector::from_signature("claim_timeout_win_public(Field,Field,Field)"),
-            [game_index, note_hash, board.turn as Field]
-        );
-    }
-
-    #[aztec(private)]
     fn answer_timeout(game_id: Field, row: u8, col: u8) {
         let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
         assert(boards[0].is_some(), "Game does not exist.");
@@ -171,6 +150,145 @@ contract TicTacToe {
             board.turn += 1;
             storage.boards.at(game_id).insert(&mut board, true);
         }
+    }
+
+    #[aztec(private)]
+    fn claim_fraud_win(
+        game_id: Field, 
+        turn_index: u8, 
+        // TODO: Replace with hash of message content
+        first_move: [u8; 2],
+        second_move: [u8; 2],
+        first_signature: [u8; 64], 
+        second_signature: [u8; 64],
+    ) {
+        // Check if game has already been started
+        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        if(boards[0].is_none()) {
+            context.call_private_function(
+                context.this_address(),
+                FunctionSelector::from_signature("open_channel(Field)"),
+                [game_id]
+            );
+        } 
+
+        let mut board = storage.boards.at(game_id).get_notes(NoteGetterOptions::new())[0].unwrap_unchecked();
+
+        let mut culprit = if context.msg_sender() == board.host {
+            board.challenger
+        } else {
+            assert(context.msg_sender() == board.challenger, "Sender is not host or challenger.");
+            board.host
+        };
+
+        let culprit_pubkey = get_public_key(culprit);
+
+
+        let first_msg = encode_move_msg(culprit.to_field(), game_id, turn_index, first_move[0], first_move[1]);
+        let second_msg = encode_move_msg(culprit.to_field(), game_id, turn_index, second_move[0], second_move[1]);
+
+        // Verify first signature
+        let verified_first = verify_signature(culprit_pubkey.x, culprit_pubkey.y, first_signature, first_msg);
+        // Verify second
+        let verified_second = verify_signature(culprit_pubkey.x, culprit_pubkey.y, second_signature, second_msg);
+        // If both signatures are valid then award win to opponent
+   
+        assert(verified_first & verified_second, "One of the signatures provided was not valid.");
+
+
+        storage.boards.at(game_id).remove(board);
+
+        // TODO: In case of timeout, end publicly?
+        board.over = true;
+        board.timeout_nullifier = 0;
+
+        storage.boards.at(game_id).insert(&mut board, true);
+
+        // Assign winner for game publicly
+        context.call_public_function(
+            context.this_address(),
+            FunctionSelector::from_signature("assign_winner(Field,(Field))"),
+            [game_id, context.msg_sender().to_field()]
+        );
+    }
+
+    #[aztec(private)]
+    fn claim_timeout_win(game_index: Field) {
+        // Load in board
+        let boards = storage.boards.at(game_index).get_notes(NoteGetterOptions::new());
+        assert(boards[0].is_some(), "Game does not exist.");
+
+        let mut board = boards[0].unwrap_unchecked();
+
+        let note_hash = board.compute_note_hash();
+
+        storage.boards.at(game_index).remove(board);
+        board.timeout_nullifier = 0;
+        board.over = true;
+        storage.boards.at(game_index).insert(&mut board, true);
+        context.call_public_function(
+            context.this_address(),
+            FunctionSelector::from_signature("claim_timeout_win_public(Field,Field,Field)"),
+            [game_index, note_hash, board.turn as Field]
+        );
+    }
+
+    #[aztec(private)]
+    fn dispute_timeout(
+        game_id: Field, 
+        turn_index: u8, 
+        signature: [u8; 64], 
+        sender: Field,
+        move: [u8; 2]
+    ) {
+        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        assert(boards[0].is_some(), "Game does not exist.");
+
+        let mut board = boards[0].unwrap_unchecked(); 
+        assert(turn_index >= board.turn, "Cannot dispute a timeout with a turn prior to turn it was triggered on.");
+
+        let prev_note_hash = board.compute_note_hash();
+
+        // Prove that timeout triggerer has signed past last stored game turn
+        let triggerer = if (board.turn & 1) == 1 {
+            board.host
+        } else {
+            board.challenger
+        };
+
+        let trigerrer_pubkey = get_public_key(triggerer);
+
+        let msg = encode_move_msg(sender, game_id, turn_index, move[0], move[1]);
+        let verified = verify_signature(trigerrer_pubkey.x, trigerrer_pubkey.y, signature, msg);
+
+        assert(verified, "Invalid signature");
+
+        storage.boards.at(game_id).remove(board);
+
+        board.over = true;
+        board.timeout_nullifier = 0;
+
+        storage.boards.at(game_id).insert(&mut board, true);
+
+        context.call_public_function(
+            context.this_address(),
+            FunctionSelector::from_signature("answer_timeout_public(Field)"),
+            [prev_note_hash]
+        );
+
+        let winner = if (board.turn & 1) == 1 {
+            board.challenger
+        } else {
+            board.host
+        };
+
+
+        // Assign winner for game publicly
+        context.call_public_function(
+            context.this_address(),
+            FunctionSelector::from_signature("assign_winner(Field,(Field))"),
+            [game_id, winner.to_field()]
+        );
     }
 
     #[aztec(private)]
