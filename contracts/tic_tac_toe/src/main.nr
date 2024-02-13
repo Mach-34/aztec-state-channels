@@ -106,24 +106,30 @@ contract TicTacToe {
         let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
         assert(boards[0].is_some(), "Game does not exist.");
         let mut board = boards[0].unwrap_unchecked();
-        let sender = context.msg_sender();
+
         let prev_note_hash = board.compute_note_hash();
 
+        let sender = context.msg_sender();
+
         can_play(board, sender.to_field()); // Check that player is in game and it is their turn
-        legal_move(board.moves, row, col); // Check legal move
 
-        let coord = row * 3 + col;
+        let prev_winning_move = check_game_over(board);  // Check for case where winning move was not signed by counterparty
 
-        // Remove note so we do not have duplicates
-        storage.boards.at(game_id).remove(board);
+        storage.boards.at(game_id).remove(board);   // Remove note so we do not have duplicates
 
-        if (sender == board.host) {
-            board.moves[coord] = 1;
-        } else {
-            board.moves[coord] = 4;
+        if (!prev_winning_move) {
+            legal_move(board.moves, row, col); // Check legal move
+
+            let coord = row * 3 + col;
+
+            if (sender == board.host) {
+                board.moves[coord] = 1;
+            } else {
+                board.moves[coord] = 4;
+            }
         }
+
         board.timeout_nullifier = 0;
-        let game_over = check_game_over(board);
 
         context.call_public_function(
             context.this_address(),
@@ -131,14 +137,27 @@ contract TicTacToe {
             [prev_note_hash]
         );
 
+        let game_over = check_game_over(board);
+
         if (game_over) {
-            board.turn += 1;
+            if !prev_winning_move {
+                board.turn += 1;
+            }
             board.over = true;
             storage.boards.at(game_id).insert(&mut board, true);
             let mut winner = 0;
+
             // Check for draw
-            if (board.turn != 9) {
-                winner = sender.to_field();
+            if(prev_winning_move) {
+                if sender == board.challenger {
+                    winner = board.host.to_field();
+                } else {
+                    winner = board.challenger.to_field();
+                }
+            } else {
+                if (board.turn != 9) {
+                    winner = sender.to_field();
+                }
             }
             // Assign winner for game publicly
             context.call_public_function(
@@ -326,6 +345,9 @@ contract TicTacToe {
     fn turn(game_id: Field) -> bool {
         let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
         let mut board = boards[0].unwrap_unchecked();
+
+        assert(board.timeout_nullifier == 0, "Turn cannot be made on game with active timeout.");
+
         // Pop next move off of capsule
         let turn = get_game_turn(board, game_id);
         let row = turn[0] as u8;
@@ -356,7 +378,7 @@ contract TicTacToe {
             let note_hash = board.compute_note_hash();
             context.call_public_function(
                 context.this_address(),
-                FunctionSelector::from_signature("trigger_timeout(Field)"),
+                FunctionSelector::from_signature("set_timeout(Field)"),
                 [note_hash]
             );
             storage.boards.at(game_id).insert(&mut board, true); // Store updated board
@@ -422,6 +444,9 @@ contract TicTacToe {
         }
     }
 
+    // #[aztec(private)]
+    // fn trigger_timeout() {}
+
     #[aztec(public)]
     internal fn assign_winner(game_index: Field, winner: AztecAddress) {
         let mut game = storage.games.at(game_index).read();
@@ -465,7 +490,7 @@ contract TicTacToe {
     }
 
     #[aztec(public)]
-    internal fn trigger_timeout(note_hash: Field) {
+    internal fn set_timeout(note_hash: Field) {
         storage.timeouts.at(note_hash).write(context.timestamp());
     }
 

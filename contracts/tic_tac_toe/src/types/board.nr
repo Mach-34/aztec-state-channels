@@ -35,7 +35,7 @@ impl BoardNote {
             host,
             moves: [0; 9],
             over: false,
-            timeout_nullifier: rand(),
+            timeout_nullifier: 0,
             turn: 0,
             header: NoteHeader::empty(),
         }

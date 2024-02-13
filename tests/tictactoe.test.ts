@@ -590,7 +590,7 @@ describe("Tic Tac Toe", () => {
       });
     });
 
-    xdescribe("Test timout function", () => {
+    xdescribe("Test timeout in case of no return move", () => {
       test("Trigger timeout and confirm it to be set at note hash", async () => {
         console.log(
           "trigger timeout selector: ",
@@ -820,6 +820,146 @@ describe("Tic Tac Toe", () => {
           accounts.bob.getAddress().toBigInt()
         );
       });
+    });
+
+    xdescribe("Test timeout in case of no counter party signature", () => {
+      test("If no timeout is triggered then a missing opponent signature should revert", async () => {
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.alice
+        );
+
+        const openChannelCapsule = prepareOpenChannel(
+          accounts.alice,
+          accounts.bob
+        );
+
+        const moves = [
+          { row: 0, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 2, col: 0, sender: accounts.bob, opponent: accounts.alice },
+          { row: 2, col: 1, sender: accounts.alice, opponent: accounts.bob },
+          { row: 2, col: 2, sender: accounts.bob, opponent: accounts.alice },
+        ];
+
+        const prepared = prepareMoves(gameIndex, moves);
+
+        // Remove Alice's signature from fourth move
+        prepared[3][6] = Fr.fromString(numToHex(0));
+        prepared[3][7] = Fr.fromString(numToHex(0));
+        prepared[3][8] = Fr.fromString(numToHex(0));
+
+        for (const move of prepared) {
+          await pxe.addCapsule(move);
+        }
+        await pxe.addCapsule(openChannelCapsule);
+
+        const call = contract.methods.orchestrator(gameIndex);
+        await expect(call.simulate()).rejects.toThrowError(
+          /Could not verify opponent signature./
+        );
+      });
+
+      test("Timeout should be triggerable with a missing opponent signature", async () => {
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.alice
+        );
+
+        const openChannelCapsule = prepareOpenChannel(
+          accounts.alice,
+          accounts.bob
+        );
+
+        const moves = [
+          { row: 0, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 2, col: 0, sender: accounts.bob, opponent: accounts.alice },
+          { row: 2, col: 1, sender: accounts.alice, opponent: accounts.bob },
+          { row: 2, col: 2, sender: accounts.bob, opponent: accounts.alice, timeout: true },
+        ];
+
+        const prepared = prepareMoves(gameIndex, moves);
+
+        // Remove Alice's signature from fourth move
+        prepared[0][6] = Fr.fromString(numToHex(0));
+        prepared[0][7] = Fr.fromString(numToHex(0));
+        prepared[0][8] = Fr.fromString(numToHex(0));
+
+        for (const move of prepared) {
+          await pxe.addCapsule(move);
+        }
+        await pxe.addCapsule(openChannelCapsule);
+
+        await contract.methods.orchestrator(gameIndex).send().wait();
+
+        // Confirm that timeout has been triggered
+        const noteHash = await contract.methods
+          .get_game_note_hash(gameIndex)
+          .view();
+        const timestamp = await contract.methods.get_timeout(noteHash).view();
+        expect(timestamp).not.toEqual(0n);
+      })
+
+      test("Timeout from missing opponent signature on winning move should result in win when timeout is answered", async () => {
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.alice
+        );
+
+        const openChannelCapsule = prepareOpenChannel(
+          accounts.alice,
+          accounts.bob
+        );
+
+        const moves = [
+          { row: 0, col: 0, sender: accounts.alice, opponent: accounts.bob },
+          { row: 2, col: 0, sender: accounts.bob, opponent: accounts.alice },
+          { row: 0, col: 1, sender: accounts.alice, opponent: accounts.bob },
+          { row: 2, col: 2, sender: accounts.bob, opponent: accounts.alice },
+          { row: 0, col: 2, sender: accounts.alice, opponent: accounts.bob, timeout: true },
+        ];
+
+        const prepared = prepareMoves(gameIndex, moves);
+
+        // Remove Bob's signature from fifth move
+        prepared[0][6] = Fr.fromString(numToHex(0));
+        prepared[0][7] = Fr.fromString(numToHex(0));
+        prepared[0][8] = Fr.fromString(numToHex(0));
+
+        for (const move of prepared) {
+          await pxe.addCapsule(move);
+        }
+        await pxe.addCapsule(openChannelCapsule);
+
+        await contract.methods.orchestrator(gameIndex).send().wait();
+
+        // Confirm that timeout has been triggered
+        const noteHash = await contract.methods
+          .get_game_note_hash(gameIndex)
+          .view();
+        const timestamp = await contract.methods.get_timeout(noteHash).view();
+        expect(timestamp).not.toEqual(0n);
+
+
+        const bobContract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.bob
+        );
+
+        await bobContract.methods.answer_timeout(gameIndex, 2, 1).send().wait();
+
+        // Game should now be over and Alice set as the winner
+        const board = await contract.methods.get_board(gameIndex).view();
+        expect(board.over).toEqual(true);
+        expect(board.turn).toEqual(5n);
+        const game = await contract.methods.get_game(gameIndex).view();
+        expect(game.winner.inner).toEqual(
+          accounts.alice.getAddress().toBigInt()
+        );
+      })
     });
 
     xdescribe("Test fraud claim in case of two moves made for the same turn", () => {
@@ -1071,7 +1211,7 @@ describe("Tic Tac Toe", () => {
       });
     });
 
-    describe("Test fraudulent timeout dispute", () => {
+    xdescribe("Test fraudulent timeout dispute", () => {
       test("Transaction should revert if game does not exists", async () => {
         const contract = await Contract.at(
           contractAddress,

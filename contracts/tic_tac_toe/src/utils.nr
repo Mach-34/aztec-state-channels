@@ -124,18 +124,27 @@ pub fn get_game_turn(game: BoardNote, game_id: Field) -> [Field; 4] {
     let challenger_pubkey = get_public_key(game.challenger);
     let host_pubkey = get_public_key(game.host);
 
-    // If sender is host then opponent is challenger. Vice versa
-    if(sender == game.host.to_field()) {
-        let opponent_verified = verify_signature(challenger_pubkey.x, challenger_pubkey.y, opponent_signature, move_msg);
-        let sender_verified = verify_signature(host_pubkey.x, host_pubkey.y, sender_signature, move_msg);
-        assert(opponent_verified, "Could not verify opponent signature.");
-        assert(sender_verified, "Could not verify sender signature.");
+    let sender_verified = if sender == game.host.to_field() {
+        verify_signature(host_pubkey.x, host_pubkey.y, sender_signature, move_msg)
     } else {
-        let opponent_verified = verify_signature(host_pubkey.x, host_pubkey.y, opponent_signature, move_msg);
-        let sender_verified = verify_signature(challenger_pubkey.x, challenger_pubkey.y, sender_signature, move_msg);
-        assert(opponent_verified, "Could not verify opponent signature.");
-        assert(sender_verified, "Could not verify sender signature.");
+        verify_signature(challenger_pubkey.x, challenger_pubkey.y, sender_signature, move_msg)
+    };
+
+    assert(sender_verified, "Could not verify sender signature.");
+
+    let empty_signature = (opponent_s1 == 0) & (opponent_s2 == 0) & (opponent_s3 == 0);
+    // If timeout is triggered and opponent signature is not included then we skip opponent signature verification
+    let mut opponent_verified = empty_signature & timeout as bool;
+
+    if(!opponent_verified) {
+        opponent_verified = if sender == game.host.to_field() {
+            verify_signature(challenger_pubkey.x, challenger_pubkey.y, opponent_signature, move_msg)
+        } else {
+            verify_signature(host_pubkey.x, host_pubkey.y, opponent_signature, move_msg)
+        };
     }
+
+    assert(opponent_verified, "Could not verify opponent signature.");
 
     [row, col, sender, timeout]
 }
