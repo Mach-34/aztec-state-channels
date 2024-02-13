@@ -444,8 +444,37 @@ contract TicTacToe {
         }
     }
 
-    // #[aztec(private)]
-    // fn trigger_timeout() {}
+    #[aztec(private)]
+    fn trigger_timeout(game_id: Field) {
+        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        assert(boards[0].is_some(), "Game does not exist.");
+        let mut board = boards[0].unwrap_unchecked();
+        assert(!board.over, "Game has ended.");
+
+        let is_host =  board.host == context.msg_sender();
+
+        let in_game = (board.challenger == context.msg_sender()) | is_host;
+        assert(in_game, "You must be in the game to trigger a timeout.");
+
+        // Must be opponents turn for you to be able to trigger a timeout
+        if is_host {
+            assert((board.turn & 1) == 1, "Must be opponent's turn to trigger timeout.");
+        } else {
+            assert((board.turn & 1) == 0, "Must be opponent's turn to trigger timeout.");
+        }
+
+        storage.boards.at(game_id).remove(board);
+
+        board.timeout_nullifier = rand();
+        let note_hash = board.compute_note_hash();
+        context.call_public_function(
+            context.this_address(),
+            FunctionSelector::from_signature("set_timeout(Field)"),
+            [note_hash]
+        );
+
+        storage.boards.at(game_id).insert(&mut board, true);
+    }
 
     #[aztec(public)]
     internal fn assign_winner(game_index: Field, winner: AztecAddress) {
@@ -496,7 +525,6 @@ contract TicTacToe {
 
     #[aztec(public)]
     internal fn start_game(challenger: Field, host: Field, game_id: Field) {
-        // let current_game_index = storage.current_game.read();
 
         // Create new game in storage
         storage.games.at(game_id).write(
@@ -507,8 +535,6 @@ contract TicTacToe {
             winner: AztecAddress::from_field(0)
         }
         );
-        // Update current game index
-        // storage.current_game.write(current_game_index + 1);
     }
 
 

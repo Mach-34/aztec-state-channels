@@ -112,7 +112,7 @@ describe("Tic Tac Toe", () => {
       } catch (err) { }
     });
 
-    xdescribe("Test game creation", () => {
+    describe("Test game creation", () => {
       test("Game should fail to start if at least one signature is not valid", async () => {
         const aliceAddress = accounts.alice.getAddress().toBuffer();
         const bobAddress = accounts.bob.getAddress().toBuffer();
@@ -171,7 +171,7 @@ describe("Tic Tac Toe", () => {
       });
     });
 
-    xdescribe("Test gameplay over state channel", () => {
+    describe("Test gameplay over state channel", () => {
       test("Transaction should fail when opponent move signature is incorrect", async () => {
         const contract = await Contract.at(
           contractAddress,
@@ -287,7 +287,7 @@ describe("Tic Tac Toe", () => {
 
         const call = contract.methods.orchestrator(gameIndex);
         await expect(call.simulate()).rejects.toThrowError(
-          /Could not verify opponent signature./
+          /Could not verify sender signature./
         );
       });
 
@@ -476,7 +476,7 @@ describe("Tic Tac Toe", () => {
 
         const call = contract.methods.orchestrator(gameIndex);
         await expect(call.simulate()).rejects.toThrowError(
-          /Could not verify opponent signature./
+          /Could not verify sender signature./
         );
       });
 
@@ -590,7 +590,7 @@ describe("Tic Tac Toe", () => {
       });
     });
 
-    xdescribe("Test timeout in case of no return move", () => {
+    describe("Test timeout in case of no return move", () => {
       test("Trigger timeout and confirm it to be set at note hash", async () => {
         console.log(
           "trigger timeout selector: ",
@@ -822,7 +822,7 @@ describe("Tic Tac Toe", () => {
       });
     });
 
-    xdescribe("Test timeout in case of no counter party signature", () => {
+    describe("Test timeout in case of no counter party signature", () => {
       test("If no timeout is triggered then a missing opponent signature should revert", async () => {
         const contract = await Contract.at(
           contractAddress,
@@ -962,7 +962,191 @@ describe("Tic Tac Toe", () => {
       })
     });
 
-    xdescribe("Test fraud claim in case of two moves made for the same turn", () => {
+    describe("Test timeout triggered manually after dispute", () => {
+      test("External timeout trigger function should revert if it is called on a nonexistent game", async () => {
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.alice
+        );
+
+        const call = contract.methods.trigger_timeout(gameIndex + 10n);
+        await expect(call.simulate()).rejects.toThrowError(
+          /Game does not exist./
+        );
+      });
+
+      test("Trigger timeout should revert if a game is over", async () => {
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.alice
+        );
+
+        const openChannelCapsule = prepareOpenChannel(
+          accounts.alice,
+          accounts.bob
+        );
+
+        const moves = [
+          { row: 0, col: 2, sender: accounts.alice, opponent: accounts.bob },
+          { row: 0, col: 0, sender: accounts.bob, opponent: accounts.alice },
+          { row: 1, col: 2, sender: accounts.alice, opponent: accounts.bob },
+          { row: 0, col: 1, sender: accounts.bob, opponent: accounts.alice },
+          { row: 2, col: 2, sender: accounts.alice, opponent: accounts.bob },
+        ];
+        const prepared = prepareMoves(gameIndex, moves);
+        for (const move of prepared) {
+          await pxe.addCapsule(move);
+        }
+        await pxe.addCapsule(openChannelCapsule);
+
+        await contract.methods.orchestrator(gameIndex).send().wait();
+
+        const call = contract.methods.trigger_timeout(gameIndex);
+        await expect(call.simulate()).rejects.toThrowError(
+          /Game has ended./
+        );
+      });
+
+      test("Trigger timeout should fail if player is not a participant in game", async () => {
+
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.alice
+        );
+
+        const openChannelCapsule = prepareOpenChannel(
+          accounts.alice,
+          accounts.bob
+        );
+
+        const moves = [
+          { row: 0, col: 2, sender: accounts.alice, opponent: accounts.bob },
+          { row: 0, col: 0, sender: accounts.bob, opponent: accounts.alice },
+          { row: 1, col: 2, sender: accounts.alice, opponent: accounts.bob },
+          { row: 0, col: 1, sender: accounts.bob, opponent: accounts.alice, timeout: true },
+        ];
+        const prepared = prepareMoves(gameIndex, moves);
+        for (const move of prepared) {
+          await pxe.addCapsule(move);
+        }
+        await pxe.addCapsule(openChannelCapsule);
+
+        await contract.methods.orchestrator(gameIndex).send().wait();
+
+        // Answer timeout as Alice
+        await contract.methods.answer_timeout(gameIndex, 1, 1).send().wait();
+
+        const charlieContract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.charlie
+        );
+
+        const call = charlieContract.methods.trigger_timeout(gameIndex);
+        await expect(call.simulate()).rejects.toThrowError(
+          /You must be in the game to trigger a timeout./
+        );
+      });
+
+      test("Trigger timeout should fail if it is the trigger's turn", async () => {
+
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.alice
+        );
+
+        const openChannelCapsule = prepareOpenChannel(
+          accounts.alice,
+          accounts.bob
+        );
+
+        const moves = [
+          { row: 0, col: 2, sender: accounts.alice, opponent: accounts.bob },
+          { row: 0, col: 0, sender: accounts.bob, opponent: accounts.alice },
+          { row: 1, col: 2, sender: accounts.alice, opponent: accounts.bob },
+          { row: 0, col: 1, sender: accounts.bob, opponent: accounts.alice, timeout: true },
+        ];
+        const prepared = prepareMoves(gameIndex, moves);
+        for (const move of prepared) {
+          await pxe.addCapsule(move);
+        }
+        await pxe.addCapsule(openChannelCapsule);
+
+        await contract.methods.orchestrator(gameIndex).send().wait();
+
+        // Answer timeout as Alice
+        await contract.methods.answer_timeout(gameIndex, 1, 1).send().wait();
+
+        const bobContract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.bob
+        );
+
+        const call = bobContract.methods.trigger_timeout(gameIndex);
+        await expect(call.simulate()).rejects.toThrowError(
+          /Must be opponent's turn to trigger timeout./
+        );
+      });
+
+      test("Trigger timeout should fail if it is the trigger's turn", async () => {
+
+        const contract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.alice
+        );
+
+        const openChannelCapsule = prepareOpenChannel(
+          accounts.alice,
+          accounts.bob
+        );
+
+        const moves = [
+          { row: 0, col: 2, sender: accounts.alice, opponent: accounts.bob },
+          { row: 0, col: 0, sender: accounts.bob, opponent: accounts.alice },
+          { row: 1, col: 2, sender: accounts.alice, opponent: accounts.bob },
+          { row: 0, col: 1, sender: accounts.bob, opponent: accounts.alice, timeout: true },
+        ];
+        const prepared = prepareMoves(gameIndex, moves);
+        for (const move of prepared) {
+          await pxe.addCapsule(move);
+        }
+        await pxe.addCapsule(openChannelCapsule);
+
+        await contract.methods.orchestrator(gameIndex).send().wait();
+
+        // Answer timeout as Alice
+        await contract.methods.answer_timeout(gameIndex, 1, 1).send().wait();
+
+        await contract.methods.trigger_timeout(gameIndex).send().wait();
+
+        // Confirm timeout has been triggered
+        const noteHash = await contract.methods
+          .get_game_note_hash(gameIndex)
+          .view();
+        const timestamp = await contract.methods.get_timeout(noteHash).view();
+        expect(timestamp).not.toEqual(0n);
+
+        // Answer as bob
+        const bobContract = await Contract.at(
+          contractAddress,
+          TicTacToeContractArtifact,
+          accounts.bob
+        );
+        await bobContract.methods.answer_timeout(gameIndex, 2, 1).send().wait();
+
+        // Confirm timeout is no longer set
+        const timestampUpdated = await contract.methods.get_timeout(noteHash).view();
+        expect(timestampUpdated).toEqual(0n);
+      });
+    });
+
+    describe("Test fraud claim in case of two moves made for the same turn", () => {
       test("Signatures must be from same to turn for fraud win to be claimed", async () => {
         const contract = await Contract.at(
           contractAddress,
@@ -1211,7 +1395,7 @@ describe("Tic Tac Toe", () => {
       });
     });
 
-    xdescribe("Test fraudulent timeout dispute", () => {
+    describe("Test fraudulent timeout dispute", () => {
       test("Transaction should revert if game does not exists", async () => {
         const contract = await Contract.at(
           contractAddress,
