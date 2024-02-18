@@ -8,32 +8,36 @@ use dep::aztec::{
         utils::compute_note_hash_for_read_or_nullify
     },
     oracle::{
+        rand::rand,
         get_public_key::get_public_key,
         nullifier_key::get_nullifier_secret_key
     },
     protocol_types::address::AztecAddress,
 };
 
-global BOARD_NOTE_LEN = 13;
+global BOARD_NOTE_LEN = 14;
 
 struct BoardNote {
     challenger: AztecAddress,
-    header: NoteHeader,
     host: AztecAddress,
     moves: [u8; 9],
     over: bool,
-    turn: u8
+    timeout_nullifier: Field, // Toggle whether timeout is triggered with note creation 
+    turn: u8,
+    header: NoteHeader
 }
 
 impl BoardNote {
     pub fn new(challenger: AztecAddress, host: AztecAddress) -> Self {
+
         BoardNote {
             challenger,
-            header: NoteHeader::empty(),
             host,
             moves: [0; 9],
             over: false,
-            turn: 0
+            timeout_nullifier: rand(),
+            turn: 0,
+            header: NoteHeader::empty(),
         }
     }
     
@@ -50,7 +54,8 @@ impl BoardNote {
             host: AztecAddress::from_field(serialized[10]),
             moves,
             over: serialized[11] as bool,
-            turn: serialized[12] as u8
+            timeout_nullifier: serialized[12],
+            turn: serialized[13] as u8
         }
     }
 
@@ -64,7 +69,8 @@ impl BoardNote {
         serialized[9] = note.challenger.to_field();
         serialized[10] = note.host.to_field();
         serialized[11] = note.over as Field;
-        serialized[12] = note.turn as Field;
+        serialized[12] = note.timeout_nullifier;
+        serialized[13] = note.turn as Field;
         serialized
     }
 
@@ -74,34 +80,53 @@ impl BoardNote {
 
     pub fn compute_nullifier(self, context: &mut PrivateContext) -> Field {
         let note_hash_for_nullify = compute_note_hash_for_read_or_nullify(BoardNoteMethods, self);
-        let mut recipient = AztecAddress::from_field(0);
-        if self.turn % 2 == 0 {
-            recipient = self.host;
+
+        let nullifier = if self.timeout_nullifier != 0 {
+            pedersen_hash([
+                note_hash_for_nullify,
+                self.timeout_nullifier
+            ], 0)
         } else {
-            recipient = self.challenger;
+            let recipient = if (self.turn & 1) == 0 {
+                self.host
+            } else {
+                self.challenger
+            };
+            let secret = context.request_nullifier_secret_key(recipient);
+            pedersen_hash([
+                note_hash_for_nullify,
+                secret.low,
+                secret.high,
+            ], 0)
         };
-        let secret = context.request_nullifier_secret_key(recipient);
-        pedersen_hash([
-            note_hash_for_nullify,
-            secret.low,
-            secret.high,
-        ], 0)
+
+        nullifier
     }
 
     pub fn compute_nullifier_without_context(self) -> Field {
         let note_hash_for_nullify = compute_note_hash_for_read_or_nullify(BoardNoteMethods, self);
-        let mut recipient = AztecAddress::from_field(0);
-        if self.turn % 2 == 0 {
-            recipient = self.host;
+
+        let nullifier = if self.timeout_nullifier != 0 {
+            pedersen_hash([
+                note_hash_for_nullify,
+                self.timeout_nullifier
+            ], 0)
         } else {
-            recipient = self.challenger;
+            let recipient = if (self.turn & 1) == 0 {
+                self.host
+            } else {
+                self.challenger
+            };
+
+            let secret = get_nullifier_secret_key(recipient);
+            pedersen_hash([
+                note_hash_for_nullify,
+                secret.low,
+                secret.high,
+            ], 0)
         };
-        let secret = get_nullifier_secret_key(recipient);
-        pedersen_hash([
-            note_hash_for_nullify,
-            secret.low,
-            secret.high
-        ], 0)
+
+        nullifier
     }
 
     pub fn set_header(&mut self, header: NoteHeader) {
@@ -109,19 +134,32 @@ impl BoardNote {
     }
 
     pub fn broadcast(self, context: &mut PrivateContext, slot: Field) {
-        let mut recipient = AztecAddress::from_field(0);
-        if self.turn % 2 == 0 {
-            recipient = self.host;
+        // If timeout is triggered then broadcast note to both players in game
+        if(self.timeout_nullifier != 0) {
+            let recipients = [self.host, self.challenger];
+            for i in 0..2 {
+                emit_encrypted_log(
+                    context,
+                    (*context).this_address(),
+                    slot,
+                    get_public_key(recipients[i]),
+                    self.serialize()
+                );
+            }
         } else {
-            recipient = self.challenger;
-        };
-        emit_encrypted_log(
-            context,
-            (*context).this_address(),
-            slot,
-            get_public_key(recipient),
-            self.serialize()
-        );
+            let recipient = if (self.turn & 1) == 1 {
+                self.host
+            } else {
+                self.challenger
+            };
+            emit_encrypted_log(
+                context,
+                (*context).this_address(),
+                slot,
+                get_public_key(recipient),
+                self.serialize()
+            );
+        }
     }
 }
 

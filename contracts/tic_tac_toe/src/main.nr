@@ -44,17 +44,8 @@ contract TicTacToe {
             game::{
                 Game,
                 GameMethods,
-                GameNote, 
-                GameNoteMethods,
-                GAME_NOTE_LEN,
                 GAME_SERIALIZED_LEN
             },
-            // timeout::{
-            //     Timeout,
-            //     TimeoutMethods,
-            //     TIMEOUT_SERIALIZED_LEN,
-            //     TIMEOUT_WINDOW
-            // }
         },
         utils::{ 
             can_play, 
@@ -64,7 +55,7 @@ contract TicTacToe {
             encode_move_msg,
             legal_move,
             get_game_turn,
-            // open_channel,
+            rand,
             pop_capsule,
             verify_game_start,
             TIMEOUT_WINDOW
@@ -73,9 +64,8 @@ contract TicTacToe {
 
     struct Storage {
         current_game: PublicState<Field, FIELD_SERIALIZED_LEN>,
-        games: Map<Field, Set<GameNote, GAME_NOTE_LEN>>,
         timeouts: Map<Field, PublicState<Field, FIELD_SERIALIZED_LEN>>,
-        games_public: Map<Field, PublicState<Game, GAME_SERIALIZED_LEN>>,
+        games: Map<Field, PublicState<Game, GAME_SERIALIZED_LEN>>,
         boards: Map<Field, Set<BoardNote, BOARD_NOTE_LEN>>
     }
 
@@ -83,30 +73,23 @@ contract TicTacToe {
         fn init(context: Context) -> Self {
             Storage {
                 current_game: PublicState::new(context, 1, FieldSerializationMethods),
-                games: Map::new(
-                    context,
-                    2,
-                    |context, slot| {
-                        Set::new(context, slot, GameNoteMethods)
-                    }
-                ),
                 timeouts: Map::new(
                     context, 
-                    3, 
+                    2, 
                     |context, slot| {
                         PublicState::new(context, slot, FieldSerializationMethods)
                     }
                 ),
-                games_public: Map::new(
+                games: Map::new(
                     context, 
-                    4, 
+                    3, 
                     |context, slot| {
                         PublicState::new(context, slot, GameMethods)
                     }
                 ),
                 boards: Map::new(
                     context,
-                    5,
+                    4,
                     |context, slot| {
                         Set::new(context, slot, BoardNoteMethods)
                     }
@@ -129,6 +112,7 @@ contract TicTacToe {
         let note_hash = board.compute_note_hash();
 
         storage.boards.at(game_index).remove(board);
+        board.timeout_nullifier = 0;
         board.over = true;
         storage.boards.at(game_index).insert(&mut board, true);
         context.call_public_function(
@@ -159,7 +143,7 @@ contract TicTacToe {
         } else {
             board.moves[coord] = 4;
         }
-
+        board.timeout_nullifier = 0;
         let game_over = check_game_over(board);
 
         context.call_public_function(
@@ -250,6 +234,7 @@ contract TicTacToe {
         board.turn += 1;
 
         if (timeout) {
+            board.timeout_nullifier = rand();
             let note_hash = board.compute_note_hash();
             context.call_public_function(
                 context.this_address(),
@@ -274,7 +259,7 @@ contract TicTacToe {
                 );
                 storage.boards.at(game_id).insert(&mut board, true); // Store updated board
             } else {
-                storage.boards.at(game_id).insert(&mut board, false); // Store updated board
+                storage.boards.at(game_id).insert(&mut board, true); // Store updated board
             }
         }
         game_over | timeout
@@ -287,24 +272,26 @@ contract TicTacToe {
         if (boards[0].is_some()) {
             board = boards[0].unwrap_unchecked();
             assert(!board.over, "Game has ended."); // If game is over then revert
-        } else {
-            // #### Open channel ####
-            context.call_private_function(
-                context.this_address(),
-                FunctionSelector::from_signature("open_channel(Field)"),
-                [game_id]
-            );
         }
 
         let mut end_condition = false;
 
-        for i in 0..2 {
-            if (!end_condition) {
-                end_condition = context.call_private_function(
+        for i in 0..3 {
+            if((i == 0) & boards[0].is_none()) {
+                // #### Open channel ####
+                context.call_private_function(
                     context.this_address(),
-                    FunctionSelector::from_signature("turn(Field)"),
+                    FunctionSelector::from_signature("open_channel(Field)"),
                     [game_id]
-                )[0] as bool;
+                );
+            } else {
+                if (!end_condition) {
+                    end_condition = context.call_private_function(
+                        context.this_address(),
+                        FunctionSelector::from_signature("turn(Field)"),
+                        [game_id]
+                    )[0] as bool;
+                }
             }
         }
 
@@ -319,10 +306,10 @@ contract TicTacToe {
 
     #[aztec(public)]
     internal fn assign_winner(game_index: Field, winner: AztecAddress) {
-        let mut game = storage.games_public.at(game_index).read();
+        let mut game = storage.games.at(game_index).read();
         game.over = true;
         game.winner = winner;
-        storage.games_public.at(game_index).write(game);
+        storage.games.at(game_index).write(game);
     }
 
     #[aztec(public)]
@@ -336,7 +323,7 @@ contract TicTacToe {
         // Set timestamp for timeout to 0
         storage.timeouts.at(hash).write(0);
 
-        let mut game = storage.games_public.at(game_index).read();
+        let mut game = storage.games.at(game_index).read();
         game.over = true;
 
         // Winner is host
@@ -346,7 +333,7 @@ contract TicTacToe {
         } else {
             game.winner = game.challenger;
         }
-        storage.games_public.at(game_index).write(game);
+        storage.games.at(game_index).write(game);
     }
 
     #[aztec(public)]
@@ -359,15 +346,6 @@ contract TicTacToe {
         storage.timeouts.at(hash).write(0);
     }
 
-    #[aztec(private)]
-    internal fn set_winner_from_timeout(game_id: Field, winner: Field) {
-        let mut game = storage.games.at(game_id).get_notes(NoteGetterOptions::new())[0].unwrap_unchecked();
-        // Remove note so we do not have duplicates
-        storage.games.at(game_id).remove(game);
-        game.winner = AztecAddress::from_field(winner);
-        storage.games.at(game_id).insert(&mut game, true);
-    }
-
     #[aztec(public)]
     internal fn trigger_timeout(note_hash: Field) {
         storage.timeouts.at(note_hash).write(context.timestamp());
@@ -378,7 +356,7 @@ contract TicTacToe {
         // let current_game_index = storage.current_game.read();
 
         // Create new game in storage
-        storage.games_public.at(game_id).write(
+        storage.games.at(game_id).write(
             Game {
             challenger: AztecAddress::from_field(challenger),
             host: AztecAddress::from_field(host),
@@ -413,7 +391,7 @@ contract TicTacToe {
     }
 
     unconstrained fn get_game(index: Field) -> pub Game {
-        storage.games_public.at(index).read()
+        storage.games.at(index).read()
     }
 
     unconstrained fn get_game_note_hash(index: Field) -> pub Field {

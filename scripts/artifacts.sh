@@ -1,33 +1,27 @@
 #!/bin/bash
 
-# TODO: Make script OS agnostic, pretty, handle failures, etc
-# TODO: include other contracts
-
 # paths to local aztec-cli bin
-# AZTEC_CLI=$(pwd)/../aztec-packages/yarn-project/cli/dest/bin/index.js
+AZTEC_CLI=$(pwd)/../aztec-packages/yarn-project/cli/dest/bin/index.js
 
-## Compile Counter State Channel Contract
-cd ./contracts/counter_channel
-# aztec-nargo compile
+cd contracts/tic_tac_toe
 
-## Generate JSON ABI and TS Bindings
-# aztec-cli codegen ./target -o . --ts
-# $AZTEC_CLI codegen ./target -o . --ts
-
-# Update import in TS bindings to reflect where abi will be
-# sed -i 's|target/counter-CounterStateChannel.json|./CounterStateChannel.json|' CounterStateChannel.ts
-
-## Copy artifacts to src
-# mv ./target/counter-CounterStateChannel.json ../../src/artifacts/CounterStateChannel.json
-# mv CounterStateChannel.ts ../../src/artifacts/CounterStateChannel.ts
-
-## Clean up workspace
-# rm -rf ./target
-
-cd ../tic_tac_toe
+# Compile ACIR
 aztec-nargo compile
-aztec-cli codegen ./target -o . --ts
-sed -i 's|target/tic_tac_toe-TicTacToe.json|./TicTacToe.json|' TicTacToe.ts
+# Generate TypeScript artifacts
+$AZTEC_CLI codegen ./target -o . --ts
+# Update path for the ABI import in the typescript interface
+case "$OSTYPE" in
+    darwin*)
+        # macOS
+        sed -i '' 's|target/tic_tac_toe-TicTacToe.json|./TicTacToe.json|' TicTacToe.ts
+        ;;
+    *)
+        # Linux
+        sed -i 's|target/tic_tac_toe-TicTacToe.json|./TicTacToe.json|' TicTacToe.ts
+        ;;
+esac
+# Move artifacts to js repository
 mv ./target/tic_tac_toe-TicTacToe.json ../../src/artifacts/TicTacToe.json
 mv TicTacToe.ts ../../src/artifacts/TicTacToe.ts
+# Cleanup
 rm -rf ./target
