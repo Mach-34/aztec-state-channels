@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "@aztec/accounts": "file:../aztec-packages/yarn-project/accounts",
-    "@aztec/acir-simulator": "file:../aztec-packages/yarn-project/acir-simulator",
+    "@aztec/simulator": "file:../aztec-packages/yarn-project/simulator",
     "@aztec/circuit-types": "file:../aztec-packages/yarn-project/circuit-types",
     "@aztec/aztec-node": "file:../aztec-packages/yarn-project/aztec-node",
     "@aztec/aztec.js": "file:../aztec-packages/yarn-project/aztec.js",
