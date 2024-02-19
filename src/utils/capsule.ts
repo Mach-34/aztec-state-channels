@@ -1,6 +1,7 @@
 import { AccountWalletWithPrivateKey, Fr, Contract } from "@aztec/aztec.js";
 import { signSchnorr, serializeSignature, numToHex } from "./index.js";
-import { Move, genSerializedMoveSignature } from "./move.js";
+import { Move, Turn } from "./move.js";
+import { SchnorrSignature } from "@aztec/circuits.js/barretenberg";
 
 export const prepareOpenChannel = (
   alice: AccountWalletWithPrivateKey,
@@ -39,36 +40,37 @@ export const prepareOpenChannel = (
     bob_s1,
     bob_s2,
     bob_s3,
+    // Open channel capsule requires length 8 so pad extra value
+    Fr.ZERO,
+    Fr.ZERO,
   ];
 };
 
-export const prepareMoves = (
-  gameIndex: BigInt,
-  moves: Move[],
-  startIndex: number = 0
-) => {
-  return moves
-    .map((move, index) => {
-      const privKey = move.player.getEncryptionPrivateKey();
-      const { s1, s2, s3 } = genSerializedMoveSignature(
-        gameIndex,
-        index + startIndex,
-        move.row,
-        move.col,
-        privKey
-      );
-      return [
-        Fr.fromString(numToHex(move.row)),
-        Fr.fromString(numToHex(move.col)),
-        move.player.getAddress(),
-        s1,
-        s2,
-        s3,
-        Fr.fromString(numToHex(move.timeout ? 1 : 0)),
-        Fr.fromString(numToHex(0)), // Open channel capsule requires length 8 so pad extra value
-      ];
-    })
-    .reverse();
+/**
+ * Serializes a turn into a list of field elements ordered for capsule popping inside of witcalc
+ *
+ * @param turn - the turn to serialize into a list of Fr elements
+ * @returns - a formatted capsule to push to stack
+ */
+export const encapsulateTurn = (turn: Turn) => {
+  // todo: fix to be .toFields() with correct standard serialization
+  const senderSignature = serializeSignature(
+    new Uint8Array(turn.signatures.sender.toBuffer())
+  );
+  const opponentSignature = serializeSignature(
+    new Uint8Array(
+      (turn.signatures.opponent ?? SchnorrSignature.EMPTY).toBuffer()
+    )
+  );
+
+  return [
+    Fr.fromString(numToHex(turn.move.row)),
+    Fr.fromString(numToHex(turn.move.col)),
+    turn.move.sender,
+    ...[senderSignature.s1, senderSignature.s2, senderSignature.s3],
+    ...[opponentSignature.s1, opponentSignature.s2, opponentSignature.s3],
+    Fr.fromString(numToHex(turn.timeout ? 1 : 0)),
+  ];
 };
 
 export const emptyCapsuleStack = async (contract: Contract) => {

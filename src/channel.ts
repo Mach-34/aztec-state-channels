@@ -1,5 +1,6 @@
 import {
   AppExecutionResult,
+  Note,
   NoteAndSlot,
   TxReceipt,
   TxStatus,
@@ -15,11 +16,16 @@ import {
   SentTx,
 } from "@aztec/aztec.js";
 import {
-  prepareMoves,
+  // prepareMoves,
   serializeSignature,
   emptyCapsuleStack,
   signSchnorr,
+  numToHex,
+  Move,
+  Turn,
+  encapsulateTurn,
 } from "./utils/index.js";
+import { SchnorrSignature } from "@aztec/circuits.js/barretenberg";
 
 export type OpenChannelSignature = {
   from: AztecAddress;
@@ -44,6 +50,8 @@ export class TicTacToeStateChannel {
   constructor(
     /** PXE Client */
     public readonly pxe: PXE,
+    /** Account to sign and send with */
+    public readonly account: AccountWalletWithPrivateKey,
     /** Contract address of deployed tic_tac_toe.nr instance */
     public readonly contractAddress: AztecAddress,
     /** Index of the game to play */
@@ -91,31 +99,33 @@ export class TicTacToeStateChannel {
    * @param account - the account wallet to use within the PXE with this contract
    * @param guestSignature - the `challenger` signature consenting to the channel open
    */
-  public async openChannel(
-    account: AccountWalletWithPrivateKey,
-    guestSignature: OpenChannelSignature
-  ) {
+  public async openChannel(guestSignature: OpenChannelSignature): Promise<AppExecutionResult> {
     // ensure channel is not already opened
     if (this.openChannelResult) {
       throw new Error(`Channel for game id ${this.gameIndex} already opened!`);
     }
     // get contract
-    const contract = await this.getContract(account);
+    const contract = await this.getContract();
     // ensure capsule stack is sanitized
     await emptyCapsuleStack(contract);
     // build the host's channel open signature
     let hostSignature = TicTacToeStateChannel.signOpenChannel(
-      account,
+      this.account,
       guestSignature.from
     );
+
     // add the open_channel proving time advice to the capsule stack
     let openChannelCapsule = [
       hostSignature.from,
       guestSignature.from,
       ...hostSignature.sig,
       ...guestSignature.sig,
+      // Padding to get capsule length to 10
+      Fr.ZERO,
+      Fr.ZERO,
     ];
-    await this.pxe.addCapsule(openChannelCapsule);
+
+    await this.account.addCapsule(openChannelCapsule);
     // get the packed arguments for the call
     let packedArguments = await contract.methods
       .open_channel(this.gameIndex)
@@ -123,14 +133,31 @@ export class TicTacToeStateChannel {
       .then((request) => request.packedArguments[0]);
     // simulate the open_channel call
     let sideEffectCounter = 3; // always 3 on open_channel
-    this.openChannelResult = await account.simulateAppCircuit(
+    this.openChannelResult = await this.account.simulateAppCircuit(
       packedArguments,
       this.functionSelectors.open,
-      [], // no notes
       [], // no notes
       this.contractAddress,
       this.contractAddress,
       sideEffectCounter
+    );
+    return this.openChannelResult;
+  }
+
+  /**
+   * Build a move object supplementing channel state
+   *
+   * @param row - the x coordinate of the move
+   * @param col - the y coordinate of the move
+   * @returns - a move message for the given game and turn
+   */
+  public buildMove(row: number, col: number): Move {
+    return new Move(
+      this.account.getAddress(),
+      row,
+      col,
+      this.turnResults.length,
+      this.gameIndex
     );
   }
 
@@ -141,41 +168,45 @@ export class TicTacToeStateChannel {
    * @param guestSignature - the `challenger` signature consenting to the channel open
    */
   public async turn(
-    account: AccountWalletWithPrivateKey,
-    move: { row: number; col: number }
-  ) {
+    move: Move,
+    opponentSignature?: SchnorrSignature
+  ): Promise<AppExecutionResult> {
     // ensure subsequent turns can be built from the previously stored turn
     if (this.checkChannelOver()) throw new Error("Game is already over!");
     // get contract
-    const contract = await this.getContract(account);
+    const contract = await this.getContract();
     // ensure pxe is sanitized
     await emptyCapsuleStack(contract);
     // add the turn proving time advice to the capsule stack
-    let turnIndex = this.turnResults.length;
-    let capsuleMove = { row: move.row, col: move.col, player: account };
-    let moveCapsule = prepareMoves(this.gameIndex, [capsuleMove], turnIndex)[0];
-    await this.pxe.addCapsule(moveCapsule);
+    let turnCapsule = encapsulateTurn({
+      move: move,
+      signatures: {
+        sender: move.sign(this.account),
+        opponent: opponentSignature,
+      },
+      timeout: opponentSignature === undefined
+    });
+    await this.account.addCapsule(turnCapsule);
     // get the packed arguments for the call
     let packedArguments = await contract.methods
       .turn(this.gameIndex)
       .create()
       .then((request) => request.packedArguments[0]);
     // get execution notes and nullifiers
-    let { notes, nullified } = this.getNotesAndNullified();
+    let notes = this.getNotesForTurn();
     // calculate the current side effect counter
-    let sideEffectCounter = this.getTurnSideEffectCounter(turnIndex);
+    let sideEffectCounter = this.getTurnSideEffectCounter(move.turnIndex);
     // simulate the turn to get the app execution result
-    this.turnResults.push(
-      await account.simulateAppCircuit(
-        packedArguments,
-        this.functionSelectors.turn,
-        notes,
-        nullified,
-        this.contractAddress,
-        this.contractAddress,
-        sideEffectCounter
-      )
+    const result = await this.account.simulateAppCircuit(
+      packedArguments,
+      this.functionSelectors.turn,
+      notes,
+      this.contractAddress,
+      this.contractAddress,
+      sideEffectCounter
     );
+    this.turnResults.push(result);
+    return result;
   }
 
   /**
@@ -183,7 +214,7 @@ export class TicTacToeStateChannel {
    * @dev does not include entrypoint yet
    * @param account - the account that will post the state channel onchain
    */
-  public async orchestrate(account: AccountWalletWithPrivateKey) {
+  public async orchestrate() {
     // ensure the channel is not already orchestrated
     if (this.orchestratorResult) {
       throw new Error(
@@ -191,11 +222,11 @@ export class TicTacToeStateChannel {
       );
     }
     // ensure the game is over
-    if (!this.checkChannelOver()) {
-      throw new Error(`Game for game id ${this.gameIndex} is not over yet!`);
-    }
+    // if (!this.checkChannelOver()) {
+    //   throw new Error(`Game for game id ${this.gameIndex} is not over yet!`);
+    // }
     // get contract
-    const contract = await this.getContract(account);
+    const contract = await this.getContract();
     // get the packed arguments for the call (reusable)
     let packedArguments = await contract.methods
       .orchestrator(this.gameIndex)
@@ -213,15 +244,14 @@ export class TicTacToeStateChannel {
         cachedSimulations.push(this.orchestratorResult);
       cachedSimulations = cachedSimulations.reverse();
       // get notes and nullified vector for the orchestrator (starts with output of turn before first in cached simulations)
-      let { notes, nullified } = this.getNotesAndNullified(startIndex - 1);
+      let notes = this.getNotesForTurn(startIndex - 1);
       // get the side effect counter for the orchestrator (always 1 - the side effect counter for first turn in orchestrator)
       let sideEffectCounter = this.getTurnSideEffectCounter(startIndex) - 1;
       // simulate the orchestrator iteration
-      this.orchestratorResult = await account.simulateAppCircuit(
+      this.orchestratorResult = await this.account.simulateAppCircuit(
         packedArguments,
         this.functionSelectors.orchestrate,
         notes,
-        nullified,
         this.contractAddress,
         this.contractAddress,
         sideEffectCounter,
@@ -237,12 +267,11 @@ export class TicTacToeStateChannel {
       this.turnResults[0],
       this.openChannelResult!,
     ];
-    this.orchestratorResult = await account.simulateAppCircuit(
+    this.orchestratorResult = await this.account.simulateAppCircuit(
       packedArguments,
       this.functionSelectors.orchestrate,
       [],
-      [],
-      account.getAddress(),
+      this.account.getAddress(),
       this.contractAddress,
       3, // always 3 for first side effect counter
       cachedSimulations
@@ -255,27 +284,24 @@ export class TicTacToeStateChannel {
    *
    * @returns - the transaction receipt, assuming it is mined (throws on failure)
    */
-  public async finalize(
-    account: AccountWalletWithPrivateKey
-  ): Promise<TxReceipt> {
+  public async finalize(): Promise<TxReceipt> {
     // if individual turns/ channel open have not been orchestrated yet, do so
     if (!this.orchestratorResult) {
-      await this.orchestrate(account);
+      await this.orchestrate();
     }
     // get contract
-    const contract = await this.getContract(account);
+    const contract = await this.getContract();
     // construct the full tx request to post on chain
     let request = await contract.methods.orchestrator(this.gameIndex).create();
-    let tx = await account.proveSimulatedAppCircuits(
+    let tx = await this.account.proveSimulatedAppCircuits(
       request,
       this.orchestratorResult!
     );
-
     // broadcast the transaction
-    let result = await new SentTx(this.pxe, account.sendTx(tx)).wait();
+    let result = await new SentTx(this.pxe, this.account.sendTx(tx)).wait();
     if (result.status !== TxStatus.MINED)
       throw new Error(`State channel finalization status is ${result.status}`);
-    return account.getTxReceipt(result.txHash);
+    return this.account.getTxReceipt(result.txHash);
   }
 
   /**
@@ -318,29 +344,16 @@ export class TicTacToeStateChannel {
    * @returns notes - the execution notes used so far
    * @returns nullified - the nullified bool vector used so far (corresponds to execution notes)
    */
-  public getNotesAndNullified(turnIndex?: number) {
+  public getNotesForTurn(turnIndex?: number): NoteAndSlot[] {
     // if no turns, return from openChannelResult
     if (this.turnResults.length === 0) {
-      // should always be [note], [false]
-      return {
-        notes: this.openChannelResult!.newNotes,
-        nullified: this.openChannelResult!.newNotes.map(() => false),
-      };
+      return this.openChannelResult!.newNotes;
     }
-    turnIndex = turnIndex ? turnIndex : this.turnResults.length - 1;
     // otherwise, return from last turn
+    turnIndex = turnIndex ? turnIndex : this.turnResults.length - 1;
     let turn = this.turnResults[turnIndex];
-    // nullify all notes except last one
-    let nullified = [];
-    for (let i = 0; i < turn.newNotes.length - 1; i++) {
-      nullified.push(true);
-    }
-    nullified.push(false);
     // return notes and nullified vector
-    return {
-      notes: turn.newNotes,
-      nullified: nullified,
-    };
+    return [turn.newNotes[turn.newNotes.length - 1]]
   }
 
   /**
@@ -362,7 +375,7 @@ export class TicTacToeStateChannel {
     } else {
       // if turn is 2 (using 0 index), or if turn > 3 and is a multiple of 3, increment by 2
       let incrementBy =
-        turnIndex === 2 || (turnIndex > 3 && turnIndex % 3 === 0) ? 2n : 1n;
+        turnIndex === 2 || (turnIndex > 3 && turnIndex % 3 === 2) ? 2n : 1n;
       sideEffectCounter =
         this.turnResults[
           turnIndex - 1
@@ -377,10 +390,7 @@ export class TicTacToeStateChannel {
    * @param account - the account wallet to use within the PXE with this contract
    * @returns - the contract instance
    */
-  public async getContract(account: AccountWalletWithPrivateKey): Promise<TicTacToeContract> {
-    return await TicTacToeContract.at(
-      this.contractAddress,
-      account
-    );
+  public async getContract(): Promise<TicTacToeContract> {
+    return await TicTacToeContract.at(this.contractAddress, this.account);
   }
 }

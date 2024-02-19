@@ -1,58 +1,63 @@
 import {
   AccountWalletWithPrivateKey,
-  GrumpkinPrivateKey,
+  AztecAddress,
+  Schnorr,
 } from "@aztec/aztec.js";
 import { numToHex, signSchnorr, serializeSignature } from "./index.js";
+import { SchnorrSignature } from "@aztec/circuits.js/barretenberg";
 
-export type Move = {
-  row: number;
-  col: number;
-  player: AccountWalletWithPrivateKey;
+/** The pure data used for a move */
+export class Move {
+  constructor(
+    public readonly sender: AztecAddress,
+    public readonly row: number,
+    public readonly col: number,
+    public readonly turnIndex: number,
+    public readonly gameIndex: BigInt
+  ) {}
+
+  /**
+   * Generate the message used in a move
+   * @todo: should be pedersen hashed
+   *
+   * @returns - the message serialized in binary (but not as field elements)
+   */
+  public toMessage(): Uint8Array {
+    const moveMsg = new Uint8Array(67);
+    const addressBytes = Uint8Array.from(this.sender.toBuffer());
+    const gameIndexBytes = Uint8Array.from(
+      Buffer.from(numToHex(this.gameIndex), "hex")
+    );
+    moveMsg.set(addressBytes, 0);
+    moveMsg.set(gameIndexBytes, 32);
+    moveMsg.set([this.turnIndex, this.row, this.col], 64);
+    return moveMsg;
+  }
+
+  /**
+   * Produce a schnorr signature over the serialized move by the signer account's grumpkin key
+   *
+   * @param signer - the account to sign the data with
+   * @returns - the schnorr signature over this move
+   */
+  public sign(signer: AccountWalletWithPrivateKey): SchnorrSignature {
+    let message = this.toMessage();
+    const schnorr = new Schnorr();
+    return schnorr.constructSignature(
+      message,
+      signer.getEncryptionPrivateKey()
+    );
+  }
+}
+
+/** All data used in a turn() call */
+export type Turn = {
+  move: Move;
+  signatures: {
+    sender: SchnorrSignature; // the signature of the turn sender
+    // the signature of the turn sender's counterparty (NOT EXPLICITLY GUEST)
+    opponent?: SchnorrSignature; // undefined if timeout
+  };
+  // if true, should trigger a timeout
   timeout?: boolean;
-};
-
-export const deserializeMoveSignature = (
-  s1: BigInt,
-  s2: BigInt,
-  s3: BigInt
-): Uint8Array => {
-  const signature = new Uint8Array(64);
-  const s1_bytes = Uint8Array.from(Buffer.from(numToHex(s1), "hex")).slice(12);
-  const s2_bytes = Uint8Array.from(Buffer.from(numToHex(s2), "hex")).slice(12);
-  const s3_bytes = Uint8Array.from(Buffer.from(numToHex(s3), "hex")).slice(8);
-
-  signature.set(s1_bytes, 0);
-  signature.set(s2_bytes, 20);
-  signature.set(s3_bytes, 40);
-  return signature;
-};
-
-export const genMoveMsg = (
-  gameIndex: BigInt,
-  turn: number,
-  row: number,
-  col: number
-) => {
-  const moveMsg = new Uint8Array(35);
-  const gameIndexBytes = Uint8Array.from(
-    Buffer.from(numToHex(gameIndex), "hex")
-  );
-  moveMsg.set(gameIndexBytes, 0);
-  moveMsg.set([turn, row, col], 32);
-  return moveMsg;
-};
-
-export const genSerializedMoveSignature = (
-  gameIndex: BigInt,
-  turn: number,
-  row: number,
-  col: number,
-  privKey: GrumpkinPrivateKey
-) => {
-  // Message is formed by concatenating game index, move row, and move column together
-  const moveMsg = genMoveMsg(gameIndex, turn, row, col);
-
-  const signature = signSchnorr(moveMsg, privKey);
-
-  return serializeSignature(signature);
 };

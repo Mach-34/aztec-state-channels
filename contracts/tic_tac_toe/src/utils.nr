@@ -2,6 +2,7 @@ use dep::aztec::{
     context::PrivateContext,
     oracle::{
         get_public_key::get_public_key,
+        debug_log::{debug_log_format, debug_log}
     },
     protocol_types::{
         abis::function_selector::FunctionSelector,
@@ -16,7 +17,7 @@ use crate::types::{
     board::BoardNote,
 };
 
-global CAPSULE_SIZE = 8; // Set to length of largest possible capsule (open channel / game tart)
+global CAPSULE_SIZE = 10; // Set to length of largest possible capsule (turn which requires move signed by both players)
 
 global TIMEOUT_WINDOW = 600; // Ten minutes
 
@@ -30,7 +31,6 @@ pub fn can_play(game: BoardNote, sender: Field) {
     assert(
         (game.host.to_field() == sender) | (game.challenger.to_field() == sender), "Sender is not challenger or host."
     );
-
     // Check that it is player's turn. Event turn means it is host's turn. Odd is challenger
     if ((game.turn & 1) == 0) {
         assert(sender == game.host.to_field(), "Only host can move.");
@@ -82,36 +82,73 @@ pub fn encode_channel_msg(host: Field, challenger: Field) -> [u8; 64] {
     msg
 }
 
-pub fn encode_move_msg(game_id: Field, turn: u8, row: u8, col: u8) -> [u8; 35] {
-    let mut msg: [u8; 35] = [0; 35];
-    // Since game index can grow arbitrarily large it is converted to 32 bytes
+pub fn encode_move_msg(from: Field, game_id: Field, turn: u8, row: u8, col: u8) -> [u8; 67] {
+    let mut msg: [u8; 67] = [0; 67];
+
+    let from_bytes = from.to_be_bytes(32);
     let game_bytes = game_id.to_be_bytes(32);
     for i in 0..32 {
-        msg[i] = game_bytes[i];
+        msg[i] = from_bytes[i];
+        msg[i + 32] = game_bytes[i];
     }
-    msg[32] = turn;
-    msg[33] = row;
-    msg[34] = col;
+    msg[64] = turn;
+    msg[65] = row;
+    msg[66] = col;
     msg
 }
 
-pub fn get_game_turn(game_id: Field, turn_index: u8) -> [Field; 4] {
+pub fn get_game_turn(game: BoardNote, game_id: Field) -> [Field; 4] {
     let turn = pop_capsule();
 
     let row = turn[0];
     let col = turn[1];
     let sender = turn[2];
-    let s1 = turn[3];
-    let s2 = turn[4];
-    let s3 = turn[5];
-    let timeout = turn[6];
+    let sender_s1 = turn[3];
+    let sender_s2 = turn[4];
+    let sender_s3 = turn[5];
+    let opponent_s1 = turn[6];
+    let opponent_s2 = turn[7];
+    let opponent_s3 = turn[8];
+    let timeout = turn[9];
 
-    let move_signature = deserialize_signature(s1, s2, s3);
+    // Confirm sender is actually in game and can move
+    can_play(game, sender);
+    let sender_signature = deserialize_signature(sender_s1, sender_s2, sender_s3);
+    let opponent_signature = deserialize_signature(opponent_s1, opponent_s2, opponent_s3);
+
     // Check that move has been authorized by specified player
-    let move_msg = encode_move_msg(game_id, turn_index, row as u8, col as u8);
-    let sender_pubkey = get_public_key(AztecAddress::from_field(sender));
-    let verified = verify_signature(sender_pubkey.x, sender_pubkey.y, move_signature, move_msg);
-    assert(verified, "Move signature could not be verified.");
+    let move_msg = encode_move_msg(sender, game_id, game.turn, row as u8, col as u8);
+
+    let challenger_pubkey = get_public_key(game.challenger);
+    let host_pubkey = get_public_key(game.host);
+
+    let sender_verified = if sender == game.host.to_field() {
+        verify_signature(host_pubkey.x, host_pubkey.y, sender_signature, move_msg)
+    } else {
+        verify_signature(
+            challenger_pubkey.x,
+            challenger_pubkey.y,
+            sender_signature,
+            move_msg
+        )
+    };
+
+    assert(sender_verified, "Could not verify sender signature.");
+
+    let empty_signature = (opponent_s1 == 0) & (opponent_s2 == 0) & (opponent_s3 == 0);
+    // If timeout is triggered and opponent signature is not included then we skip opponent signature verification
+    let mut opponent_verified = empty_signature & timeout as bool;
+
+    if (!opponent_verified) {
+        opponent_verified = if sender == game.host.to_field() {
+            verify_signature(challenger_pubkey.x, challenger_pubkey.y, opponent_signature, move_msg)
+        } else {
+            verify_signature(host_pubkey.x, host_pubkey.y, opponent_signature, move_msg)
+        };
+    }
+
+    assert(opponent_verified, "Could not verify opponent signature.");
+
     [row, col, sender, timeout]
 }
 
@@ -173,11 +210,4 @@ fn pop_capsule_oracle() -> [Field; CAPSULE_SIZE] {}
 
 unconstrained pub fn pop_capsule() -> [Field; CAPSULE_SIZE] {
     pop_capsule_oracle()
-}
-
-#[oracle(getRandomField)]
-fn rand_oracle() -> Field {}
-
-unconstrained pub fn rand() -> Field {
-    rand_oracle()
 }

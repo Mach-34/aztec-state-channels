@@ -1,6 +1,6 @@
 import { AccountWalletWithPrivateKey, Contract } from "@aztec/aztec.js";
 import { signSchnorr } from "./index.js";
-import { Move } from "./index.js";
+import { Move } from "./move.js";
 
 export const openChannel = async (
   contract: Contract,
@@ -34,18 +34,18 @@ export const openChannel = async (
     .wait();
 };
 
-export const playGame = async (
-  gameId: BigInt,
-  moves: Move[],
-  host: Contract,
-  player: Contract
-) => {
-  for (let i = 0; i < moves.length; i++) {
-    const { row, col } = moves[i];
-    if (i % 2 === 0) {
-      await host.methods.turn(gameId, row, col).send().wait();
-    } else {
-      await player.methods.turn(gameId, row, col).send().wait();
-    }
-  }
-};
+// export const playGame = async (
+//   gameId: BigInt,
+//   moves: Move[],
+//   host: Contract,
+//   player: Contract
+// ) => {
+//   for (let i = 0; i < moves.length; i++) {
+//     const { row, col } = moves[i];
+//     if (i % 2 === 0) {
+//       await host.methods.turn(gameId, row, col).send().wait();
+//     } else {
+//       await player.methods.turn(gameId, row, col).send().wait();
+//     }
+//   }
+// };

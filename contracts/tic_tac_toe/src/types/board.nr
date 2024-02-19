@@ -10,12 +10,13 @@ use dep::aztec::{
     oracle::{
         rand::rand,
         get_public_key::get_public_key,
-        nullifier_key::get_nullifier_secret_key
+        nullifier_key::get_nullifier_secret_key,
+        debug_log::{debug_log, debug_log_format}
     },
     protocol_types::address::AztecAddress,
 };
 
-global BOARD_NOTE_LEN = 14;
+global BOARD_NOTE_LEN = 15;
 
 struct BoardNote {
     challenger: AztecAddress,
@@ -24,6 +25,7 @@ struct BoardNote {
     over: bool,
     timeout_nullifier: Field, // Toggle whether timeout is triggered with note creation 
     turn: u8,
+    last_coordinate: u8,
     header: NoteHeader
 }
 
@@ -35,8 +37,9 @@ impl BoardNote {
             host,
             moves: [0; 9],
             over: false,
-            timeout_nullifier: rand(),
+            timeout_nullifier: 0,
             turn: 0,
+            last_coordinate: 0,
             header: NoteHeader::empty(),
         }
     }
@@ -55,7 +58,8 @@ impl BoardNote {
             moves,
             over: serialized[11] as bool,
             timeout_nullifier: serialized[12],
-            turn: serialized[13] as u8
+            turn: serialized[13] as u8,
+            last_coordinate: serialized[14] as u8
         }
     }
 
@@ -71,6 +75,7 @@ impl BoardNote {
         serialized[11] = note.over as Field;
         serialized[12] = note.timeout_nullifier;
         serialized[13] = note.turn as Field;
+        serialized[14] = note.last_coordinate as Field;
         serialized
     }
 
@@ -79,6 +84,7 @@ impl BoardNote {
     }
 
     pub fn compute_nullifier(self, context: &mut PrivateContext) -> Field {
+        debug_log("Computing nullifier");
         let note_hash_for_nullify = compute_note_hash_for_read_or_nullify(BoardNoteMethods, self);
 
         let nullifier = if self.timeout_nullifier != 0 {
@@ -92,6 +98,7 @@ impl BoardNote {
             } else {
                 self.challenger
             };
+            debug_log_format("Recipientr: {0}", [recipient.to_field()]);
             let secret = context.request_nullifier_secret_key(recipient);
             pedersen_hash([
                 note_hash_for_nullify,
@@ -104,6 +111,7 @@ impl BoardNote {
     }
 
     pub fn compute_nullifier_without_context(self) -> Field {
+        debug_log("Compute nullifier without context");
         let note_hash_for_nullify = compute_note_hash_for_read_or_nullify(BoardNoteMethods, self);
 
         let nullifier = if self.timeout_nullifier != 0 {
@@ -117,7 +125,8 @@ impl BoardNote {
             } else {
                 self.challenger
             };
-
+            debug_log_format("Turn: {0}", [self.turn as Field]);
+            debug_log_format("Recipient: {0}", [recipient.to_field()]);
             let secret = get_nullifier_secret_key(recipient);
             pedersen_hash([
                 note_hash_for_nullify,
@@ -135,6 +144,8 @@ impl BoardNote {
 
     pub fn broadcast(self, context: &mut PrivateContext, slot: Field) {
         // If timeout is triggered then broadcast note to both players in game
+        debug_log_format("Host: {0}", [self.host.to_field()]);
+        debug_log_format("Challenger: {0}", [self.challenger.to_field()]);
         if(self.timeout_nullifier != 0) {
             let recipients = [self.host, self.challenger];
             for i in 0..2 {
@@ -152,6 +163,8 @@ impl BoardNote {
             } else {
                 self.challenger
             };
+            debug_log_format("Broadcast turn: {0}", [self.turn as Field]);
+            debug_log_format("Recipient: {0}", [recipient.to_field()]);
             emit_encrypted_log(
                 context,
                 (*context).this_address(),

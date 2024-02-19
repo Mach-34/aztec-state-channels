@@ -7,17 +7,13 @@ global TIMEOUT_WINDOW = 30;
 
 struct Timeout {
     by: Field,
-    // 0: disputed, 1: active, 2: closed 
+    // 0: answered, 1: active, 2: closed 
     status: Field,
     timestamp: Field
 }
 
 fn deserialize(serialized: [Field; TIMEOUT_SERIALIZED_LEN]) -> Timeout {
-    Timeout {
-        by: serialized[0],
-        status: serialized[1],
-        timestamp: serialized[2]
-    }
+    Timeout { by: serialized[0], status: serialized[1], timestamp: serialized[2] }
 }
 
 fn serialize(timeout: Timeout) -> [Field; TIMEOUT_SERIALIZED_LEN] {

@@ -2,15 +2,14 @@
 
 ## Instructions on Demo:
 
-1. Ensure correct versioning of aztec CLI's:
+1. Ensure correct versioning of aztec-nargo CLI:
 ```console
-aztec-cli -V
-// 0.20.0
 aztec-nargo -V
 // nargo version = 0.23.0
 // noirc version = 0.23.0+602f23f4fb698cf6e37071936a2a46593a998d08
-// (git version hash: 602f23f4fb698cf6e37071936a2a46593a998d08, is dirty: false)
+// (git version hash: ea6aebcc4e190d9dbadaf1dd0f70950651eed615,, is dirty: false)
 ```
+You can run `VERSION=0.21.0 aztec-up` to ensure you have a valid aztec-nargo compiler cli
 
 2. Set up the proper folder structure for the imports as they currently exist
 ```
