@@ -87,7 +87,7 @@ impl BoardNote {
                 self.timeout_nullifier
             ], 0)
         } else {
-            let recipient = if (self.turn & 1) == 1 {
+            let recipient = if (self.turn & 1) == 0 {
                 self.host
             } else {
                 self.challenger
@@ -112,7 +112,7 @@ impl BoardNote {
                 self.timeout_nullifier
             ], 0)
         } else {
-            let recipient = if (self.turn & 1) == 1 {
+            let recipient = if (self.turn & 1) == 0 {
                 self.host
             } else {
                 self.challenger

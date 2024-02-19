@@ -2,6 +2,7 @@ use dep::aztec::{
     context::PrivateContext,
     oracle::{
         get_public_key::get_public_key,
+        debug_log::{debug_log_format}
     },
     protocol_types::{
         abis::function_selector::FunctionSelector,
@@ -27,6 +28,7 @@ global WINNING_PLACEMENTS = [
 ];
 
 pub fn can_play(game: BoardNote, sender: Field) {
+    debug_log_format("Sender: {0}", [sender]);
     assert(
         (game.host.to_field() == sender) | (game.challenger.to_field() == sender), "Sender is not challenger or host."
     );
@@ -111,7 +113,6 @@ pub fn get_game_turn(game: BoardNote, game_id: Field) -> [Field; 4] {
     let opponent_s3 = turn[8];
     let timeout = turn[9];
 
-
     // Confirm sender is actually in game and can move
     can_play(game, sender);
 
@@ -127,7 +128,12 @@ pub fn get_game_turn(game: BoardNote, game_id: Field) -> [Field; 4] {
     let sender_verified = if sender == game.host.to_field() {
         verify_signature(host_pubkey.x, host_pubkey.y, sender_signature, move_msg)
     } else {
-        verify_signature(challenger_pubkey.x, challenger_pubkey.y, sender_signature, move_msg)
+        verify_signature(
+            challenger_pubkey.x,
+            challenger_pubkey.y,
+            sender_signature,
+            move_msg
+        )
     };
 
     assert(sender_verified, "Could not verify sender signature.");
@@ -136,7 +142,7 @@ pub fn get_game_turn(game: BoardNote, game_id: Field) -> [Field; 4] {
     // If timeout is triggered and opponent signature is not included then we skip opponent signature verification
     let mut opponent_verified = empty_signature & timeout as bool;
 
-    if(!opponent_verified) {
+    if (!opponent_verified) {
         opponent_verified = if sender == game.host.to_field() {
             verify_signature(challenger_pubkey.x, challenger_pubkey.y, opponent_signature, move_msg)
         } else {
