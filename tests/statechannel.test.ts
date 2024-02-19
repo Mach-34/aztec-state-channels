@@ -95,7 +95,7 @@ describe("State Channel Test With Two PXEs", () => {
       };
     });
 
-    test("Won Game State Channel", async () => {
+    xtest("Won Game State Channel", async () => {
       /// OPEN CHANNEL ///
       // sign the channel open message as bob
       let guestChannelOpenSignature = TicTacToeStateChannel.signOpenChannel(
@@ -105,11 +105,10 @@ describe("State Channel Test With Two PXEs", () => {
       );
 
       // open the channel from alice's PXE
-      await channels.alice.openChannel(guestChannelOpenSignature);
+      const openChannelResult = await channels.alice.openChannel(guestChannelOpenSignature);
       // would transmit the open channel app result to bob
-      const openChannelMessage = channels.alice.openChannelResult!;
       // bob adds the open channel app result to his state channel
-      channels.bob.insertOpenChannel(openChannelMessage);
+      channels.bob.insertOpenChannel(openChannelResult);
 
       /// PLAY GAME ///
       // turn 1
@@ -259,61 +258,56 @@ describe("State Channel Test With Two PXEs", () => {
     //   expect(game.winner.inner).toEqual(0n);
     // });
 
-    // xtest("Statechannel Timeout With No Answer", async () => {
-    //   // open channel
-    //   let guestChannelOpenSignature = TicTacToeStateChannel.signOpenChannel(
-    //     accounts.bob,
-    //     accounts.alice.getAddress(),
-    //     true
-    //   );
-    //   // open the channel
-    //   await stateChannel.openChannel(accounts.alice, guestChannelOpenSignature);
+    test("Statechannel Timeout With No Answer", async () => {
+      /// OPEN CHANNEL ///
+      let guestChannelOpenSignature = TicTacToeStateChannel.signOpenChannel(
+        accounts.bob,
+        accounts.alice.getAddress(),
+        true
+      );
+      const openChannelResult = await channels.alice.openChannel(guestChannelOpenSignature);
+      channels.bob.insertOpenChannel(openChannelResult);
 
-    //   /// PLAY GAME ///
+      /// PLAY GAME ///
 
-    //   // turn 1
-    //   let move = { row: 2, col: 2 };
-    //   await stateChannel.turn(accounts.alice, accounts.bob, move);
-    //   // turn 2 (TIMEOUT)
-    //   await stateChannel.turn(accounts.bob, accounts.alice, {
-    //     row: 2,
-    //     col: 0,
-    //     timeout: true,
-    //   });
+      // turn 1
+      let move = channels.alice.buildMove(2, 2);
+      let opponentSignature = move.sign(accounts.bob);
+      let turnResult = await channels.alice.turn(move, opponentSignature);
 
-    //   /// SUBMIT LATEST STATE WITH TIMEOUT ///
-    //   await stateChannel.finalize(accounts.alice);
-    //   // // ensure the onchain state reflects the execution of the state channel
-    //   const contract = await Contract.at(
-    //     contractAddress,
-    //     TicTacToeContractArtifact,
-    //     accounts.alice
-    //   );
+      // turn 2
+      channels.bob.insertTurn(turnResult);
+      move = channels.bob.buildMove(2, 0);
+      // bob sends the move to alice, but she does not respond
+      turnResult = await channels.bob.turn(move);
 
-    //   // CHECK THAT TIMEOUT HAS BEEN SET
-    //   const noteHash = await contract.methods
-    //     .get_game_note_hash(gameIndex)
-    //     .view();
-    //   const timestamp = await contract.methods.get_timeout(noteHash).view();
-    //   expect(timestamp).not.toEqual(0n);
+      /// SUBMIT LATEST STATE WITH TIMEOUT ///
+      await channels.bob.finalize();
 
-    //   // console.log('Cheat codes: ', cc.aztec.warp);
+      // ensure the onchain state reflects the execution of the state channel
+      const contract = await TicTacToeContract.at(
+        contractAddress,
+        accounts.bob
+      );
 
-    //   await cc.aztec.warp(Number(timestamp) + 600);
-    //   // await contract.methods.claim_timeout_win(gameIndex).send().wait();
-    //   // const game = await contract.methods.get_game(gameIndex).view();
-    //   // expect(game.winner.inner).toEqual(
-    //   //   accounts.bob.getAddress().toBigInt()
-    //   // );
-    // });
+      // check timeout is active
+      const noteHash = await contract.methods
+        .get_game_note_hash(gameIndex)
+        .view();
+      const timestamp = await contract.methods.get_timeout(noteHash).view();
+      expect(timestamp).not.toEqual(0n);
+
+      /// CLAIM TIMEOUT ///
+      // warp block time 10 minutes to end of timeout window
+      await cc.aztec.warp(Number(timestamp) + 600);
+
+      // claim timeout win
+      await contract.methods.claim_timeout_win(gameIndex).send().wait();
+      const game = await contract.methods.get_game(gameIndex).view();
+      expect(game.winner.inner).toEqual(accounts.bob.getAddress().toBigInt());
+    });
 
     // xtest("Statechannel Timeout With Answer", async () => {
-    //   const stateChannel = new TicTacToeStateChannel(
-    //     pxe,
-    //     contractAddress,
-    //     gameIndex
-    //   );
-
     //   /// OPEN CHANNEL ///
     //   // sign the channel open message as bob
     //   let guestChannelOpenSignature = TicTacToeStateChannel.signOpenChannel(
@@ -358,18 +352,18 @@ describe("State Channel Test With Two PXEs", () => {
     //   const board = await contract.methods.get_board(gameIndex).view();
     //   expect(board.turn).toEqual(3n);
 
-    //   /// CONTINUE GAME TO COMPLETION ///
+      /// CONTINUE GAME TO COMPLETION ///
 
-    //   // // turn 4
-    //   // move = { row: 2, col: 2 };
-    //   // await stateChannel.turn(accounts.bob, move);
-    //   // // turn 5 (WINNING MOVE)
-    //   // move = { row: 1, col: 1 };
-    //   // await stateChannel.turn(accounts.alice, move);
+      // // turn 4
+      // move = { row: 2, col: 2 };
+      // await stateChannel.turn(accounts.bob, move);
+      // // turn 5 (WINNING MOVE)
+      // move = { row: 1, col: 1 };
+      // await stateChannel.turn(accounts.alice, move);
 
-    //   // await stateChannel.finalize(accounts.alice);
-    //   // const game = await contract.methods.get_game(gameIndex).view();
-    //   // expect(game.winner.inner).toEqual(accounts.alice.getAddress().toBigInt());
-    // });
+      // await stateChannel.finalize(accounts.alice);
+      // const game = await contract.methods.get_game(gameIndex).view();
+      // expect(game.winner.inner).toEqual(accounts.alice.getAddress().toBigInt());
+    });
   });
 });

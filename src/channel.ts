@@ -99,7 +99,7 @@ export class TicTacToeStateChannel {
    * @param account - the account wallet to use within the PXE with this contract
    * @param guestSignature - the `challenger` signature consenting to the channel open
    */
-  public async openChannel(guestSignature: OpenChannelSignature) {
+  public async openChannel(guestSignature: OpenChannelSignature): Promise<AppExecutionResult> {
     // ensure channel is not already opened
     if (this.openChannelResult) {
       throw new Error(`Channel for game id ${this.gameIndex} already opened!`);
@@ -141,6 +141,7 @@ export class TicTacToeStateChannel {
       this.contractAddress,
       sideEffectCounter
     );
+    return this.openChannelResult;
   }
 
   /**
@@ -168,7 +169,7 @@ export class TicTacToeStateChannel {
    */
   public async turn(
     move: Move,
-    opponentSignature: SchnorrSignature | undefined
+    opponentSignature?: SchnorrSignature
   ): Promise<AppExecutionResult> {
     // ensure subsequent turns can be built from the previously stored turn
     if (this.checkChannelOver()) throw new Error("Game is already over!");
@@ -183,6 +184,7 @@ export class TicTacToeStateChannel {
         sender: move.sign(this.account),
         opponent: opponentSignature,
       },
+      timeout: opponentSignature === undefined
     });
     await this.account.addCapsule(turnCapsule);
     // get the packed arguments for the call
