@@ -10,7 +10,8 @@ use dep::aztec::{
     oracle::{
         rand::rand,
         get_public_key::get_public_key,
-        nullifier_key::get_nullifier_secret_key
+        nullifier_key::get_nullifier_secret_key,
+        debug_log::{debug_log, debug_log_format}
     },
     protocol_types::address::AztecAddress,
 };
@@ -83,6 +84,7 @@ impl BoardNote {
     }
 
     pub fn compute_nullifier(self, context: &mut PrivateContext) -> Field {
+        debug_log("Computing nullifier");
         let note_hash_for_nullify = compute_note_hash_for_read_or_nullify(BoardNoteMethods, self);
 
         let nullifier = if self.timeout_nullifier != 0 {
@@ -96,6 +98,7 @@ impl BoardNote {
             } else {
                 self.challenger
             };
+            debug_log_format("Recipientr: {0}", [recipient.to_field()]);
             let secret = context.request_nullifier_secret_key(recipient);
             pedersen_hash([
                 note_hash_for_nullify,
@@ -108,6 +111,7 @@ impl BoardNote {
     }
 
     pub fn compute_nullifier_without_context(self) -> Field {
+        debug_log("Compute nullifier without context");
         let note_hash_for_nullify = compute_note_hash_for_read_or_nullify(BoardNoteMethods, self);
 
         let nullifier = if self.timeout_nullifier != 0 {
@@ -121,7 +125,8 @@ impl BoardNote {
             } else {
                 self.challenger
             };
-
+            debug_log_format("Turn: {0}", [self.turn as Field]);
+            debug_log_format("Recipient: {0}", [recipient.to_field()]);
             let secret = get_nullifier_secret_key(recipient);
             pedersen_hash([
                 note_hash_for_nullify,
@@ -139,6 +144,8 @@ impl BoardNote {
 
     pub fn broadcast(self, context: &mut PrivateContext, slot: Field) {
         // If timeout is triggered then broadcast note to both players in game
+        debug_log_format("Host: {0}", [self.host.to_field()]);
+        debug_log_format("Challenger: {0}", [self.challenger.to_field()]);
         if(self.timeout_nullifier != 0) {
             let recipients = [self.host, self.challenger];
             for i in 0..2 {
@@ -156,6 +163,8 @@ impl BoardNote {
             } else {
                 self.challenger
             };
+            debug_log_format("Broadcast turn: {0}", [self.turn as Field]);
+            debug_log_format("Recipient: {0}", [recipient.to_field()]);
             emit_encrypted_log(
                 context,
                 (*context).this_address(),

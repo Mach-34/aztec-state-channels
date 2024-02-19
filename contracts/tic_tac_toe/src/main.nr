@@ -323,7 +323,7 @@ contract TicTacToe {
             AztecAddress::from_field(challenger),
             AztecAddress::from_field(host)
         );
-        storage.boards.at(game_id).insert(&mut board, false);
+        storage.boards.at(game_id).insert(&mut board, true);
 
         context.call_public_function(
             context.this_address(),
@@ -336,7 +336,7 @@ contract TicTacToe {
     fn turn(game_id: Field) -> bool {
         let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
         let mut board = boards[0].unwrap_unchecked();
-
+        debug_log_format("Turn: {0}", [board.turn as Field]);
         assert(board.timeout_nullifier == 0, "Turn cannot be made on game with active timeout.");
 
         // Pop next move off of capsule and validate inputs

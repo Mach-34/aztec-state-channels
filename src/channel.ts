@@ -1,5 +1,6 @@
 import {
   AppExecutionResult,
+  Note,
   NoteAndSlot,
   TxReceipt,
   TxStatus,
@@ -112,6 +113,7 @@ export class TicTacToeStateChannel {
       this.account,
       guestSignature.from
     );
+
     // add the open_channel proving time advice to the capsule stack
     let openChannelCapsule = [
       hostSignature.from,
@@ -119,9 +121,10 @@ export class TicTacToeStateChannel {
       ...hostSignature.sig,
       ...guestSignature.sig,
       // Padding to get capsule length to 10
-      Fr.fromString(numToHex(0)),
-      Fr.fromString(numToHex(0)),
+      Fr.ZERO,
+      Fr.ZERO,
     ];
+
     await this.account.addCapsule(openChannelCapsule);
     // get the packed arguments for the call
     let packedArguments = await contract.methods
@@ -133,7 +136,6 @@ export class TicTacToeStateChannel {
     this.openChannelResult = await this.account.simulateAppCircuit(
       packedArguments,
       this.functionSelectors.open,
-      [], // no notes
       [], // no notes
       this.contractAddress,
       this.contractAddress,
@@ -189,7 +191,7 @@ export class TicTacToeStateChannel {
       .create()
       .then((request) => request.packedArguments[0]);
     // get execution notes and nullifiers
-    let { notes, nullified } = this.getNotesAndNullified();
+    let notes = this.getNotesForTurn();
     // calculate the current side effect counter
     let sideEffectCounter = this.getTurnSideEffectCounter(move.turnIndex);
     // simulate the turn to get the app execution result
@@ -197,7 +199,6 @@ export class TicTacToeStateChannel {
       packedArguments,
       this.functionSelectors.turn,
       notes,
-      nullified,
       this.contractAddress,
       this.contractAddress,
       sideEffectCounter
@@ -241,7 +242,7 @@ export class TicTacToeStateChannel {
         cachedSimulations.push(this.orchestratorResult);
       cachedSimulations = cachedSimulations.reverse();
       // get notes and nullified vector for the orchestrator (starts with output of turn before first in cached simulations)
-      let { notes, nullified } = this.getNotesAndNullified(startIndex - 1);
+      let notes = this.getNotesForTurn(startIndex - 1);
       // get the side effect counter for the orchestrator (always 1 - the side effect counter for first turn in orchestrator)
       let sideEffectCounter = this.getTurnSideEffectCounter(startIndex) - 1;
       // simulate the orchestrator iteration
@@ -249,7 +250,6 @@ export class TicTacToeStateChannel {
         packedArguments,
         this.functionSelectors.orchestrate,
         notes,
-        nullified,
         this.contractAddress,
         this.contractAddress,
         sideEffectCounter,
@@ -268,7 +268,6 @@ export class TicTacToeStateChannel {
     this.orchestratorResult = await this.account.simulateAppCircuit(
       packedArguments,
       this.functionSelectors.orchestrate,
-      [],
       [],
       this.account.getAddress(),
       this.contractAddress,
@@ -343,29 +342,16 @@ export class TicTacToeStateChannel {
    * @returns notes - the execution notes used so far
    * @returns nullified - the nullified bool vector used so far (corresponds to execution notes)
    */
-  public getNotesAndNullified(turnIndex?: number) {
+  public getNotesForTurn(turnIndex?: number): NoteAndSlot[] {
     // if no turns, return from openChannelResult
     if (this.turnResults.length === 0) {
-      // should always be [note], [false]
-      return {
-        notes: this.openChannelResult!.newNotes,
-        nullified: this.openChannelResult!.newNotes.map(() => false),
-      };
+      return this.openChannelResult!.newNotes;
     }
-    turnIndex = turnIndex ? turnIndex : this.turnResults.length - 1;
     // otherwise, return from last turn
+    turnIndex = turnIndex ? turnIndex : this.turnResults.length - 1;
     let turn = this.turnResults[turnIndex];
-    // nullify all notes except last one
-    let nullified = [];
-    for (let i = 0; i < turn.newNotes.length - 1; i++) {
-      nullified.push(true);
-    }
-    nullified.push(false);
     // return notes and nullified vector
-    return {
-      notes: turn.newNotes,
-      nullified: nullified,
-    };
+    return [turn.newNotes[turn.newNotes.length - 1]]
   }
 
   /**
