@@ -15,11 +15,9 @@ export const prepareTurns = (
   startIndex: number = 0
 ): Turn[] => {
   return moves.map((rawMove, i) => {
-    const sender = i % 2 === 0 ? host : challenger;
-    const opponent = i % 2 === 0 ? challenger : host;
-    console.log("Sender Address: ", sender.getAddress());
-    console.log("Opponent Address: ", opponent.getAddress());
     const turnIndex = i + startIndex;
+    const sender = turnIndex % 2 === 0 ? host : challenger;
+    const opponent = turnIndex % 2 === 0 ? challenger : host;
     let move = new Move(
       sender.getAddress(),
       rawMove.row,
@@ -32,5 +30,5 @@ export const prepareTurns = (
       opponent: rawMove.timeout ? undefined : move.sign(opponent),
     };
     return { move, signatures, timeout: rawMove.timeout };
-  });
+  }).reverse();
 };

@@ -42,25 +42,35 @@ export const prepareOpenChannel = (
     bob_s3,
     // Open channel capsule requires length 8 so pad extra value
     Fr.ZERO,
-    Fr.ZERO
+    Fr.ZERO,
   ];
 };
 
 /**
  * Serializes a turn into a list of field elements ordered for capsule popping inside of witcalc
- * 
- * @param turn - the turn to serialize into a list of Fr elements 
+ *
+ * @param turn - the turn to serialize into a list of Fr elements
  * @returns - a formatted capsule to push to stack
  */
 export const encapsulateTurn = (turn: Turn) => {
+  // todo: fix to be .toFields() with correct standard serialization
+  const senderSignature = serializeSignature(
+    new Uint8Array(turn.signatures.sender.toBuffer())
+  );
+  const opponentSignature = serializeSignature(
+    new Uint8Array(
+      (turn.signatures.opponent ?? SchnorrSignature.EMPTY).toBuffer()
+    )
+  );
+
   return [
     Fr.fromString(numToHex(turn.move.row)),
     Fr.fromString(numToHex(turn.move.col)),
     turn.move.sender,
-    ...turn.signatures.sender.toFields(),
-    ...(turn.signatures.opponent ?? SchnorrSignature.EMPTY).toFields(),
+    ...[senderSignature.s1, senderSignature.s2, senderSignature.s3],
+    ...[opponentSignature.s1, opponentSignature.s2, opponentSignature.s3],
     Fr.fromString(numToHex(turn.timeout ? 1 : 0)),
-  ].reverse();
+  ];
 };
 
 export const emptyCapsuleStack = async (contract: Contract) => {

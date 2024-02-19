@@ -15,7 +15,7 @@ use dep::aztec::{
     protocol_types::address::AztecAddress,
 };
 
-global BOARD_NOTE_LEN = 14;
+global BOARD_NOTE_LEN = 15;
 
 struct BoardNote {
     challenger: AztecAddress,
@@ -24,6 +24,7 @@ struct BoardNote {
     over: bool,
     timeout_nullifier: Field, // Toggle whether timeout is triggered with note creation 
     turn: u8,
+    last_coordinate: u8,
     header: NoteHeader
 }
 
@@ -37,6 +38,7 @@ impl BoardNote {
             over: false,
             timeout_nullifier: 0,
             turn: 0,
+            last_coordinate: 0,
             header: NoteHeader::empty(),
         }
     }
@@ -55,7 +57,8 @@ impl BoardNote {
             moves,
             over: serialized[11] as bool,
             timeout_nullifier: serialized[12],
-            turn: serialized[13] as u8
+            turn: serialized[13] as u8,
+            last_coordinate: serialized[14] as u8
         }
     }
 
@@ -71,6 +74,7 @@ impl BoardNote {
         serialized[11] = note.over as Field;
         serialized[12] = note.timeout_nullifier;
         serialized[13] = note.turn as Field;
+        serialized[14] = note.last_coordinate as Field;
         serialized
     }
 

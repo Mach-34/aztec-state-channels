@@ -13,11 +13,7 @@ struct Timeout {
 }
 
 fn deserialize(serialized: [Field; TIMEOUT_SERIALIZED_LEN]) -> Timeout {
-    Timeout {
-        by: serialized[0],
-        status: serialized[1],
-        timestamp: serialized[2]
-    }
+    Timeout { by: serialized[0], status: serialized[1], timestamp: serialized[2] }
 }
 
 fn serialize(timeout: Timeout) -> [Field; TIMEOUT_SERIALIZED_LEN] {

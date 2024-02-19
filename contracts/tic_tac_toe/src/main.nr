@@ -6,10 +6,14 @@ contract TicTacToe {
     use dep::aztec::{
         context::Context, log::emit_encrypted_log,
         note::{
-        note_getter_options::NoteGetterOptions, note_header::NoteHeader,
-        note_viewer_options::NoteViewerOptions, utils as note_utils
-    },
-        oracle::{get_public_key::get_public_key, rand::rand},
+            note_getter_options::NoteGetterOptions, note_header::NoteHeader,
+            note_viewer_options::NoteViewerOptions, utils as note_utils
+        },
+        oracle::{
+            get_public_key::get_public_key,
+            rand::rand,
+            debug_log::{debug_log_format, debug_log}
+        },
         protocol_types::{address::AztecAddress, abis::function_selector::FunctionSelector},
         state_vars::{map::Map, set::Set, public_state::PublicState},
         types::{type_serialization::field_serialization::{FieldSerializationMethods, FIELD_SERIALIZED_LEN}}
@@ -81,7 +85,7 @@ contract TicTacToe {
             legal_move(board.moves, row, col); // Check legal move
 
             let coord = row * 3 + col;
-
+            board.last_coordinate = coord;
             if (sender == board.host) {
                 board.moves[coord] = 1;
             } else {
@@ -226,29 +230,48 @@ contract TicTacToe {
     }
 
     #[aztec(private)]
-    fn dispute_timeout(game_id: Field, turn_index: u8, signature: [u8; 64], sender: Field, move: [u8; 2]) {
+    fn dispute_timeout(game_id: Field, turn_index: u8, move: [u8; 2], signature: [u8; 64]) {
         let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
         assert(boards[0].is_some(), "Game does not exist.");
 
         let mut board = boards[0].unwrap_unchecked();
+
+        // board.turn -1 allows the timeout turn to be challenged if it was double spent
         assert(
-            turn_index >= board.turn, "Cannot dispute a timeout with a turn prior to turn it was triggered on."
+            turn_index >= board.turn - 1, "Cannot dispute a timeout with a turn prior to turn it was triggered on."
         );
+
+        // Ensure the disputed move is not the same as the timeout move
+        let coord = move[0] * 3 + move[1];
+        assert(board.last_coordinate != coord, "Disputed move is the same as the timeout move.");
 
         let prev_note_hash = board.compute_note_hash();
 
-        // Prove that timeout triggerer has signed past last stored game turn
-        let triggerer = if (board.turn & 1) == 1 {
-            board.host
+        // determine who initiated the timeout
+        let mut triggerer: AztecAddress = AztecAddress::zero();
+        let mut disputer: AztecAddress = AztecAddress::zero();
+        if (board.turn & 1) == 1 {
+            triggerer = board.host;
+            disputer = board.challenger;
         } else {
-            board.challenger
+            triggerer = board.challenger;
+            disputer = board.host;
         };
 
+        // determine who is the sender of the move being used to dispute timeout
+        let sender = if (turn_index & 1) == 1 {
+            board.challenger
+        } else {
+            board.host
+        };
+
+        // ensure that the sender is the opponent of the timeout triggerer
+        assert(context.msg_sender() == disputer, "Only dispute intiator's opponent can dispute timeout.");
+
+        // Prove that timeout triggerer has signed past last stored game turn
         let trigerrer_pubkey = get_public_key(triggerer);
-
-        let msg = encode_move_msg(sender, game_id, turn_index, move[0], move[1]);
+        let msg = encode_move_msg(sender.to_field(), game_id, turn_index, move[0], move[1]);
         let verified = verify_signature(trigerrer_pubkey.x, trigerrer_pubkey.y, signature, msg);
-
         assert(verified, "Invalid signature");
 
         storage.boards.at(game_id).remove(board);
@@ -316,29 +339,26 @@ contract TicTacToe {
 
         assert(board.timeout_nullifier == 0, "Turn cannot be made on game with active timeout.");
 
-        // Pop next move off of capsule
+        // Pop next move off of capsule and validate inputs
         let turn = get_game_turn(board, game_id);
         let row = turn[0] as u8;
         let col = turn[1] as u8;
         let sender = turn[2];
         let timeout = turn[3] as bool;
         let mut game_over = false;
-
-        can_play(board, sender); // Check that player is in game and it is their turn
         legal_move(board.moves, row, col); // Check legal move
-
-        let coord = row * 3 + col;
 
         // Remove note so we do not have duplicates
         storage.boards.at(game_id).remove(board);
 
+        let coord = row * 3 + col;
+        board.last_coordinate = coord;
         // Check whether sender is host or not
         if (sender == board.host.to_field()) {
             board.moves[coord] = 1;
         } else {
             board.moves[coord] = 4;
         }
-
         board.turn += 1;
 
         if (timeout) {

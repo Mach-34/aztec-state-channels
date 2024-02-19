@@ -2,7 +2,7 @@ use dep::aztec::{
     context::PrivateContext,
     oracle::{
         get_public_key::get_public_key,
-        debug_log::{debug_log_format}
+        debug_log::{debug_log_format, debug_log}
     },
     protocol_types::{
         abis::function_selector::FunctionSelector,
@@ -28,11 +28,9 @@ global WINNING_PLACEMENTS = [
 ];
 
 pub fn can_play(game: BoardNote, sender: Field) {
-    debug_log_format("Sender: {0}", [sender]);
     assert(
         (game.host.to_field() == sender) | (game.challenger.to_field() == sender), "Sender is not challenger or host."
     );
-
     // Check that it is player's turn. Event turn means it is host's turn. Odd is challenger
     if ((game.turn & 1) == 0) {
         assert(sender == game.host.to_field(), "Only host can move.");
@@ -115,7 +113,6 @@ pub fn get_game_turn(game: BoardNote, game_id: Field) -> [Field; 4] {
 
     // Confirm sender is actually in game and can move
     can_play(game, sender);
-
     let sender_signature = deserialize_signature(sender_s1, sender_s2, sender_s3);
     let opponent_signature = deserialize_signature(opponent_s1, opponent_s2, opponent_s3);
 

@@ -20,7 +20,11 @@ import {
   emptyCapsuleStack,
   signSchnorr,
   numToHex,
+  Move,
+  Turn,
+  encapsulateTurn,
 } from "./utils/index.js";
+import { SchnorrSignature } from "@aztec/circuits.js/barretenberg";
 
 export type OpenChannelSignature = {
   from: AztecAddress;
@@ -138,15 +142,32 @@ export class TicTacToeStateChannel {
   }
 
   /**
+   * Build a move object supplementing channel state
+   *
+   * @param row - the x coordinate of the move
+   * @param col - the y coordinate of the move
+   * @returns - a move message for the given game and turn
+   */
+  public buildMove(row: number, col: number): Move {
+    return new Move(
+      this.account.getAddress(),
+      row,
+      col,
+      this.turnResults.length,
+      this.gameIndex
+    );
+  }
+
+  /**
    * Execute the simulation for the `turn` app circuit. Stores execution result
    *
    * @param account - the account wallet to use within the PXE with this contract
    * @param guestSignature - the `challenger` signature consenting to the channel open
    */
   public async turn(
-    opponent: AccountWalletWithPrivateKey,
-    move: { row: number; col: number; timeout?: boolean }
-  ) {
+    move: Move,
+    opponentSignature: SchnorrSignature | undefined
+  ): Promise<AppExecutionResult> {
     // ensure subsequent turns can be built from the previously stored turn
     if (this.checkChannelOver()) throw new Error("Game is already over!");
     // get contract
@@ -154,11 +175,14 @@ export class TicTacToeStateChannel {
     // ensure pxe is sanitized
     await emptyCapsuleStack(contract);
     // add the turn proving time advice to the capsule stack
-    let turnIndex = this.turnResults.length;
-    let capsuleMove = { row: move.row, col: move.col, player: this.account };
-    // prepareMoves(this.gameIndex, [capsuleMove], turnIndex)[0]
-    let moveCapsule: Fr[] = [];
-    await this.account.addCapsule(moveCapsule);
+    let turnCapsule = encapsulateTurn({
+      move: move,
+      signatures: {
+        sender: move.sign(this.account),
+        opponent: opponentSignature,
+      },
+    });
+    await this.account.addCapsule(turnCapsule);
     // get the packed arguments for the call
     let packedArguments = await contract.methods
       .turn(this.gameIndex)
@@ -167,19 +191,19 @@ export class TicTacToeStateChannel {
     // get execution notes and nullifiers
     let { notes, nullified } = this.getNotesAndNullified();
     // calculate the current side effect counter
-    let sideEffectCounter = this.getTurnSideEffectCounter(turnIndex);
+    let sideEffectCounter = this.getTurnSideEffectCounter(move.turnIndex);
     // simulate the turn to get the app execution result
-    this.turnResults.push(
-      await this.account.simulateAppCircuit(
-        packedArguments,
-        this.functionSelectors.turn,
-        notes,
-        nullified,
-        this.contractAddress,
-        this.contractAddress,
-        sideEffectCounter
-      )
+    const result = await this.account.simulateAppCircuit(
+      packedArguments,
+      this.functionSelectors.turn,
+      notes,
+      nullified,
+      this.contractAddress,
+      this.contractAddress,
+      sideEffectCounter
     );
+    this.turnResults.push(result);
+    return result;
   }
 
   /**
