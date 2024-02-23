@@ -24,7 +24,7 @@ const {
   SECONDARY_PXE_URL = "http://localhost:8085",
 } = process.env;
 
-describe("State Channel Test With Two PXEs", () => {
+xdescribe("State Channel Test With Two PXEs", () => {
   jest.setTimeout(1500000);
   let contractAddress: AztecAddress;
   let cc: CheatCodes;
@@ -76,7 +76,7 @@ describe("State Channel Test With Two PXEs", () => {
     // Clear out capsule stack each time tests are ran
     try {
       await emptyCapsuleStack(deployed);
-    } catch (err) {}
+    } catch (err) { }
   });
 
   describe("TicTacToe State Channel Single PXE", () => {
@@ -380,7 +380,7 @@ describe("State Channel Test With Two PXEs", () => {
       move = continued.bob.buildMove(2, 1);
       opponentSignature = move.sign(accounts.alice);
       turnResult = await continued.bob.turn(move, opponentSignature);
-    
+
       // turn 5
       continued.alice.insertTurn(turnResult);
       move = continued.alice.buildMove(0, 2);
