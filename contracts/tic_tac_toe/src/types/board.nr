@@ -13,19 +13,34 @@ use dep::aztec::{
         nullifier_key::get_nullifier_secret_key,
         debug_log::{debug_log, debug_log_format}
     },
-    protocol_types::address::AztecAddress,
+    protocol_types::{
+        address::AztecAddress,
+        utils::field::field_from_bytes
+    }
 };
 
-global BOARD_NOTE_LEN = 15;
+// packed[0..9] = moves
+// packed[9] = last coordinate
+// packed[10] = turn
+// packed[11] = over
+global PACKED_LEN = 12;
+
+// serialized[0] = packed
+// serialized[1] = host
+// serialized[2] = challenger
+// serialized[3] = nullifier
+// serialized[4] = timeout_nullifier
+global BOARD_NOTE_LEN = 5;
 
 struct BoardNote {
-    challenger: AztecAddress,
     host: AztecAddress,
-    moves: [u8; 9],
-    over: bool,
+    challenger: AztecAddress,
+    nullifier: Field, // standard nullifier used so anyone can nullify (use other constraints to guard)
     timeout_nullifier: Field, // Toggle whether timeout is triggered with note creation 
-    turn: u8,
+    moves: [u8; 9],
     last_coordinate: u8,
+    turn: u8,
+    over: bool,
     header: NoteHeader
 }
 
@@ -33,50 +48,58 @@ impl BoardNote {
     pub fn new(challenger: AztecAddress, host: AztecAddress) -> Self {
 
         BoardNote {
-            challenger,
             host,
-            moves: [0; 9],
-            over: false,
+            challenger,
+            nullifier: rand(),
             timeout_nullifier: 0,
-            turn: 0,
+            moves: [0; 9],
             last_coordinate: 0,
+            turn: 0,
+            over: false,
             header: NoteHeader::empty(),
         }
     }
     
     pub fn deserialize(serialized: [Field; BOARD_NOTE_LEN]) -> Self {
+        // unpack the packed field
+        let packed = serialized[0].to_le_bytes(PACKED_LEN);
         let mut moves: [u8; 9] = [0; 9];
-
         for i in 0..9 {
-            moves[i] = serialized[i] as u8;
+            moves[i] = packed[i] as u8;
         }
-
+        // marshall into board note
         BoardNote {
-            challenger: AztecAddress::from_field(serialized[9]),
-            header: NoteHeader::empty(),
-            host: AztecAddress::from_field(serialized[10]),
+            host: AztecAddress::from_field(serialized[1]),
+            challenger: AztecAddress::from_field(serialized[2]),
+            nullifier: serialized[3],
+            timeout_nullifier: serialized[4],
             moves,
-            over: serialized[11] as bool,
-            timeout_nullifier: serialized[12],
-            turn: serialized[13] as u8,
-            last_coordinate: serialized[14] as u8
+            last_coordinate: packed[9] as u8,
+            turn: packed[10] as u8,
+            over: packed[11] as bool,
+            header: NoteHeader::empty()
         }
     }
 
     pub fn serialize(note: BoardNote) -> [Field; BOARD_NOTE_LEN] {
-        let mut serialized: [Field; BOARD_NOTE_LEN] =  [0; BOARD_NOTE_LEN];
-
+        // pack all fields that fit in 1 byte
+        let mut packed_arr: [u8; PACKED_LEN] = [0; PACKED_LEN];
         for i in 0..9 {
-            serialized[i] = note.moves[i] as Field;
+            packed_arr[i] = note.moves[i];
         }
+        packed_arr[9] = note.last_coordinate as u8;
+        packed_arr[10] = note.turn as u8;
+        packed_arr[11] = note.over as u8;
+        let packed = field_from_bytes(packed_arr, false);
 
-        serialized[9] = note.challenger.to_field();
-        serialized[10] = note.host.to_field();
-        serialized[11] = note.over as Field;
-        serialized[12] = note.timeout_nullifier;
-        serialized[13] = note.turn as Field;
-        serialized[14] = note.last_coordinate as Field;
-        serialized
+        // serialize the full note
+        [
+            packed,
+            note.host.to_field(),
+            note.challenger.to_field(),
+            note.nullifier,
+            note.timeout_nullifier
+        ]
     }
 
     pub fn compute_note_hash(self) -> Field {
@@ -84,7 +107,6 @@ impl BoardNote {
     }
 
     pub fn compute_nullifier(self, context: &mut PrivateContext) -> Field {
-        debug_log("Computing nullifier");
         let note_hash_for_nullify = compute_note_hash_for_read_or_nullify(BoardNoteMethods, self);
 
         let nullifier = if self.timeout_nullifier != 0 {
@@ -93,17 +115,9 @@ impl BoardNote {
                 self.timeout_nullifier
             ], 0)
         } else {
-            let recipient = if (self.turn & 1) == 0 {
-                self.host
-            } else {
-                self.challenger
-            };
-            debug_log_format("Recipientr: {0}", [recipient.to_field()]);
-            let secret = context.request_nullifier_secret_key(recipient);
             pedersen_hash([
                 note_hash_for_nullify,
-                secret.low,
-                secret.high,
+                self.nullifier
             ], 0)
         };
 
@@ -111,7 +125,6 @@ impl BoardNote {
     }
 
     pub fn compute_nullifier_without_context(self) -> Field {
-        debug_log("Compute nullifier without context");
         let note_hash_for_nullify = compute_note_hash_for_read_or_nullify(BoardNoteMethods, self);
 
         let nullifier = if self.timeout_nullifier != 0 {
@@ -120,18 +133,9 @@ impl BoardNote {
                 self.timeout_nullifier
             ], 0)
         } else {
-            let recipient = if (self.turn & 1) == 0 {
-                self.host
-            } else {
-                self.challenger
-            };
-            debug_log_format("Turn: {0}", [self.turn as Field]);
-            debug_log_format("Recipient: {0}", [recipient.to_field()]);
-            let secret = get_nullifier_secret_key(recipient);
             pedersen_hash([
                 note_hash_for_nullify,
-                secret.low,
-                secret.high,
+                self.nullifier
             ], 0)
         };
 
@@ -144,8 +148,6 @@ impl BoardNote {
 
     pub fn broadcast(self, context: &mut PrivateContext, slot: Field) {
         // If timeout is triggered then broadcast note to both players in game
-        debug_log_format("Host: {0}", [self.host.to_field()]);
-        debug_log_format("Challenger: {0}", [self.challenger.to_field()]);
         if(self.timeout_nullifier != 0) {
             let recipients = [self.host, self.challenger];
             for i in 0..2 {
@@ -158,13 +160,11 @@ impl BoardNote {
                 );
             }
         } else {
-            let recipient = if (self.turn & 1) == 1 {
+            let recipient = if (self.turn & 1) == 0 {
                 self.host
             } else {
                 self.challenger
             };
-            debug_log_format("Broadcast turn: {0}", [self.turn as Field]);
-            debug_log_format("Recipient: {0}", [recipient.to_field()]);
             emit_encrypted_log(
                 context,
                 (*context).this_address(),

@@ -1069,7 +1069,7 @@ describe("Tic Tac Toe", () => {
           await accounts.bob.addCapsule(move);
         }
         await accounts.bob.addCapsule(openChannelCapsule);
-
+          
         // post state so far and initiate a timeout as bob
         let contract = await TicTacToeContract.at(
           contractAddress,

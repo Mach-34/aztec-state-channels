@@ -81,6 +81,9 @@ contract TicTacToe {
 
         storage.boards.at(game_id).remove(board); // Remove note so we do not have duplicates
 
+        // set next random nullifier
+        board.nullifier = rand();
+
         if (!prev_winning_move) {
             legal_move(board.moves, row, col); // Check legal move
 
@@ -146,7 +149,7 @@ contract TicTacToe {
         // Check if game has already been started
         let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
         if (boards[0].is_none()) {
-            context.call_private_function(
+            let _ = context.call_private_function(
                 context.this_address(),
                 FunctionSelector::from_signature("open_channel(Field)"),
                 [game_id]
@@ -323,7 +326,7 @@ contract TicTacToe {
             AztecAddress::from_field(challenger),
             AztecAddress::from_field(host)
         );
-        storage.boards.at(game_id).insert(&mut board, true);
+        storage.boards.at(game_id).insert(&mut board, false);
 
         context.call_public_function(
             context.this_address(),
@@ -336,7 +339,6 @@ contract TicTacToe {
     fn turn(game_id: Field) -> bool {
         let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
         let mut board = boards[0].unwrap_unchecked();
-        debug_log_format("Turn: {0}", [board.turn as Field]);
         assert(board.timeout_nullifier == 0, "Turn cannot be made on game with active timeout.");
 
         // Pop next move off of capsule and validate inputs
@@ -351,6 +353,8 @@ contract TicTacToe {
         // Remove note so we do not have duplicates
         storage.boards.at(game_id).remove(board);
 
+        // Set next random nullifier
+        board.nullifier = rand();
         let coord = row * 3 + col;
         board.last_coordinate = coord;
         // Check whether sender is host or not
@@ -360,7 +364,6 @@ contract TicTacToe {
             board.moves[coord] = 4;
         }
         board.turn += 1;
-
         if (timeout) {
             board.timeout_nullifier = rand();
             let note_hash = board.compute_note_hash();
@@ -369,7 +372,6 @@ contract TicTacToe {
                 FunctionSelector::from_signature("set_timeout(Field)"),
                 [note_hash]
             );
-            storage.boards.at(game_id).insert(&mut board, true); // Store updated board
         } else {
             game_over = check_game_over(board);
             if (game_over) {
@@ -385,12 +387,11 @@ contract TicTacToe {
                     FunctionSelector::from_signature("assign_winner(Field,(Field))"),
                     [game_id, winner]
                 );
-                storage.boards.at(game_id).insert(&mut board, true); // Store updated board
-            } else {
-                storage.boards.at(game_id).insert(&mut board, true); // Store updated board
             }
         }
-        game_over | timeout
+        let end_condition = game_over | timeout;
+        storage.boards.at(game_id).insert(&mut board, end_condition); // Store updated board
+        end_condition
     }
 
     #[aztec(private)]
@@ -403,16 +404,16 @@ contract TicTacToe {
         }
 
         let mut end_condition = false;
-
         for i in 0..3 {
             if ((i == 0) & boards[0].is_none()) {
                 // #### Open channel ####
-                context.call_private_function(
+                let _ = context.call_private_function(
                     context.this_address(),
                     FunctionSelector::from_signature("open_channel(Field)"),
                     [game_id]
                 );
             } else if (!end_condition) {
+                debug_log_format("Turn {0}", [i as Field]);
                 end_condition = context.call_private_function(
                         context.this_address(),
                         FunctionSelector::from_signature("turn(Field)"),
@@ -422,7 +423,7 @@ contract TicTacToe {
         }
 
         if (!end_condition) {
-            context.call_private_function(
+            let _ = context.call_private_function(
                 context.this_address(),
                 FunctionSelector::from_signature("orchestrator(Field)"),
                 [game_id]
@@ -451,6 +452,8 @@ contract TicTacToe {
 
         storage.boards.at(game_id).remove(board);
 
+        // set nullifiers
+        board.nullifier = rand();
         board.timeout_nullifier = rand();
         let note_hash = board.compute_note_hash();
         context.call_public_function(
