@@ -16,7 +16,7 @@ import {
   emptyCapsuleStack,
 } from "../src/index.js";
 import { ContinuedStateChannel } from "../src/channel/continued.js";
-import { NoteAndSlot } from "@aztec/circuit-types";
+import { ExtendedNote, NoteAndSlot } from "@aztec/circuit-types";
 
 const {
   ETH_RPC_URL = "http://localhost:8545",
@@ -366,11 +366,10 @@ describe("State Channel Test With Two PXEs", () => {
       // get starting note as bob
       let txHash = answer_res.txHash;
       const note = await accounts.bob.getNotes({ txHash }).then(notes => notes[0]);
-      // alice can get the note with the same call as it is broadcast to both
+      console.log("Note: ", note)
+      // todo: provide way for opponent to get ExtendedNote without cooperation
 
-      // console.log("Notes: ", notes);
-
-      // // CONTINUE GAME TO COMPLETION ///
+      /// CONTINUE GAME TO COMPLETION ///
 
       let continued = {
         alice: new ContinuedStateChannel(alicePXE, accounts.alice, contractAddress, gameIndex, 3),
@@ -382,19 +381,11 @@ describe("State Channel Test With Two PXEs", () => {
       opponentSignature = move.sign(accounts.alice);
       turnResult = await continued.bob.turn(move, opponentSignature);
     
+      // turn 5
       continued.alice.insertTurn(turnResult);
       move = continued.alice.buildMove(0, 2);
       opponentSignature = move.sign(accounts.bob);
       turnResult = await continued.alice.turn(move, opponentSignature);
-      // let note = turnResult.newNotes[1].note.items;
-      // for (let i = 0; i < note.length; i++) {
-      //   console.log(note[i].toBigInt());
-      // }
-      // turn 5
-      // continued.bob.insertTurn(turnResult);
-      // move = continued.bob.buildMove(2, 2);
-      // opponentSignature = move.sign(accounts.alice);
-      // turnResult = await continued.bob.turn(move, opponentSignature);
 
       // finalize continued game
       await accounts.alice.addNote(note);

@@ -78,7 +78,7 @@ describe("Tic Tac Toe", () => {
       } catch (err) {}
     });
 
-    xdescribe("Test game creation", () => {
+    describe("Test game creation", () => {
       test("Game should fail to start if at least one signature is not valid", async () => {
         const aliceAddress = accounts.alice.getAddress().toBuffer();
         const bobAddress = accounts.bob.getAddress().toBuffer();
@@ -649,7 +649,7 @@ describe("Tic Tac Toe", () => {
       });
     });
 
-    xdescribe("Test timeout", () => {
+    describe("Test timeout", () => {
       test("External timeout trigger function should revert if it is called on a nonexistent game", async () => {
         const contract = await TicTacToeContract.at(
           contractAddress,
@@ -1132,7 +1132,7 @@ describe("Tic Tac Toe", () => {
     // an honest actor can repeatedly send the same state proposal without punishment
     // fraud can be claimed simply with an open channel and two signatures over different state proposals; there is
     // no need to verify interstitial state when this occurs
-    xdescribe('"Double Spend" Fraud', () => {
+    describe('"Double Spend" Fraud', () => {
       test("Cannot claim fraud if not channel participant", async () => {
         const contract = await TicTacToeContract.at(
           contractAddress,
@@ -1407,7 +1407,7 @@ describe("Tic Tac Toe", () => {
     // fraud case where a party tries to timeout while counterparty can prove state has already advanced past that state increment
     // in practice, this is somewhat similar to the "double spend" fraud case, but the counterparty may not have access to signature
     // over a different move used in the timeout or the timeout could be the same move
-    xdescribe("Test fraudulent timeout dispute", () => {
+    describe("Test fraudulent timeout dispute", () => {
       test("Transaction should revert if game does not exists", async () => {
         const contract = await TicTacToeContract.at(
           contractAddress,

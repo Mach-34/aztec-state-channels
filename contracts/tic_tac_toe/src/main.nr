@@ -149,7 +149,7 @@ contract TicTacToe {
         // Check if game has already been started
         let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
         if (boards[0].is_none()) {
-            context.call_private_function(
+            let _ = context.call_private_function(
                 context.this_address(),
                 FunctionSelector::from_signature("open_channel(Field)"),
                 [game_id]
@@ -326,7 +326,7 @@ contract TicTacToe {
             AztecAddress::from_field(challenger),
             AztecAddress::from_field(host)
         );
-        storage.boards.at(game_id).insert(&mut board, true);
+        storage.boards.at(game_id).insert(&mut board, false);
 
         context.call_public_function(
             context.this_address(),
@@ -389,8 +389,9 @@ contract TicTacToe {
                 );
             }
         }
-        storage.boards.at(game_id).insert(&mut board, true); // Store updated board
-        game_over | timeout
+        let end_condition = game_over | timeout;
+        storage.boards.at(game_id).insert(&mut board, end_condition); // Store updated board
+        end_condition
     }
 
     #[aztec(private)]
@@ -406,7 +407,7 @@ contract TicTacToe {
         for i in 0..3 {
             if ((i == 0) & boards[0].is_none()) {
                 // #### Open channel ####
-                context.call_private_function(
+                let _ = context.call_private_function(
                     context.this_address(),
                     FunctionSelector::from_signature("open_channel(Field)"),
                     [game_id]
@@ -422,7 +423,7 @@ contract TicTacToe {
         }
 
         if (!end_condition) {
-            context.call_private_function(
+            let _ = context.call_private_function(
                 context.this_address(),
                 FunctionSelector::from_signature("orchestrator(Field)"),
                 [game_id]
