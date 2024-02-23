@@ -60,7 +60,7 @@ describe("Tic Tac Toe", () => {
     // Clear out capsule stack each time tests are ran
     try {
       await emptyCapsuleStack(deployed);
-    } catch (err) {}
+    } catch (err) { }
   });
 
   describe("Test state channel over orchestrator function", () => {
@@ -75,7 +75,7 @@ describe("Tic Tac Toe", () => {
       );
       try {
         await emptyCapsuleStack(contract);
-      } catch (err) {}
+      } catch (err) { }
     });
 
     describe("Test game creation", () => {
@@ -1069,7 +1069,7 @@ describe("Tic Tac Toe", () => {
           await accounts.bob.addCapsule(move);
         }
         await accounts.bob.addCapsule(openChannelCapsule);
-          
+
         // post state so far and initiate a timeout as bob
         let contract = await TicTacToeContract.at(
           contractAddress,
@@ -1125,6 +1125,58 @@ describe("Tic Tac Toe", () => {
         expect(gameUpdated.winner.inner).toEqual(
           accounts.bob.getAddress().toBigInt()
         );
+      });
+
+      test("Manual timeout should be triggerable following answer to timeout triggered within open channel", async () => {
+        // prepare open channel
+        const openChannelCapsule = prepareOpenChannel(
+          accounts.alice,
+          accounts.bob
+        );
+
+        // prepare turns with bob initiating timeout
+        const moves = [
+          { row: 0, col: 2 },
+          { row: 0, col: 0 },
+          { row: 1, col: 2 },
+          { row: 0, col: 1, timeout: true },
+        ];
+        const turns = prepareTurns(
+          moves,
+          gameIndex,
+          accounts.alice,
+          accounts.bob
+        );
+
+        // encapsulate turns
+        const turnCapsules = turns.map((turn) => encapsulateTurn(turn));
+
+        // add capsules
+        for (const turn of turnCapsules) {
+          await accounts.bob.addCapsule(turn);
+        }
+        await accounts.bob.addCapsule(openChannelCapsule);
+
+        // trigger timeout as bob
+        let contract = await TicTacToeContract.at(
+          contractAddress,
+          accounts.bob
+        );
+
+        await contract.methods.orchestrator(gameIndex).send().wait();
+
+        // Answer timeout as Alice
+        contract = await TicTacToeContract.at(contractAddress, accounts.alice);
+        await contract.methods.answer_timeout(gameIndex, 1, 1).send().wait();
+
+        await contract.methods.trigger_timeout(gameIndex).send().wait();
+
+        // ensure that the timeout is active
+        const noteHash = await contract.methods
+          .get_game_note_hash(gameIndex)
+          .view();
+        const timestamp = await contract.methods.get_timeout(noteHash).view();
+        expect(timestamp).not.toEqual(0n);
       });
     });
 
