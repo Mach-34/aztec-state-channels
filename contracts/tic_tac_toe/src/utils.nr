@@ -117,6 +117,7 @@ pub fn get_game_turn(game: BoardNote, game_id: Field) -> [Field; 4] {
     let opponent_signature = deserialize_signature(opponent_s1, opponent_s2, opponent_s3);
 
     // Check that move has been authorized by specified player
+    debug_log_format("Turn: {0}=================", [game.turn as Field]);
     let move_msg = encode_move_msg(sender, game_id, game.turn, row as u8, col as u8);
 
     let challenger_pubkey = get_public_key(game.challenger);
