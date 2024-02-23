@@ -263,7 +263,7 @@ describe("State Channel Test With Two PXEs", () => {
     //   expect(game.winner.inner).toEqual(0n);
     // });
 
-    xtest("State Channel Timeout With No Answer", async () => {
+    test("State Channel Timeout With No Answer", async () => {
       /// OPEN CHANNEL ///
       let guestChannelOpenSignature = TicTacToeStateChannel.signOpenChannel(
         accounts.bob,
@@ -314,7 +314,7 @@ describe("State Channel Test With Two PXEs", () => {
       expect(game.winner.inner).toEqual(accounts.bob.getAddress().toBigInt());
     });
 
-    xtest("State Channel Timeout With Answer", async () => {
+    test("State Channel Timeout With Answer", async () => {
       /// OPEN CHANNEL ///
       // sign the channel open message as bob
       let guestChannelOpenSignature = TicTacToeStateChannel.signOpenChannel(
@@ -365,18 +365,16 @@ describe("State Channel Test With Two PXEs", () => {
 
       // get starting note as bob
       let txHash = answer_res.txHash;
-      const notes = await accounts.bob.getNotes({ txHash });
-      const startingNote = new NoteAndSlot(
-        notes[0].note,
-        channels.bob.turnResults[0].newNotes[0].storageSlot
-      );
+      const note = await accounts.bob.getNotes({ txHash }).then(notes => notes[0]);
+      // alice can get the note with the same call as it is broadcast to both
+
       // console.log("Notes: ", notes);
 
       // // CONTINUE GAME TO COMPLETION ///
 
       let continued = {
-        alice: new ContinuedStateChannel(alicePXE, accounts.alice, contractAddress, gameIndex, 3, startingNote),
-        bob: new ContinuedStateChannel(bobPXE, accounts.bob, contractAddress, gameIndex, 3, startingNote),
+        alice: new ContinuedStateChannel(alicePXE, accounts.alice, contractAddress, gameIndex, 3),
+        bob: new ContinuedStateChannel(bobPXE, accounts.bob, contractAddress, gameIndex, 3),
       }
 
       // turn 4
@@ -399,6 +397,7 @@ describe("State Channel Test With Two PXEs", () => {
       // turnResult = await continued.bob.turn(move, opponentSignature);
 
       // finalize continued game
+      await accounts.alice.addNote(note);
       await continued.alice.finalize();
 
       // check alice won

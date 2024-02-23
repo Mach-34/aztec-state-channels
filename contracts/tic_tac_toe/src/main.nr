@@ -376,7 +376,6 @@ contract TicTacToe {
             game_over = check_game_over(board);
             if (game_over) {
                 board.over = true; // Update private board state to reflect end game.
-                debug_log("Game Over!!!!!!!!");
                 let mut winner = 0;
                 // Check for draw
                 if (board.turn != 9) {
@@ -402,10 +401,8 @@ contract TicTacToe {
             board = boards[0].unwrap_unchecked();
             assert(!board.over, "Game has ended."); // If game is over then revert
         }
+
         let mut end_condition = false;
-
-        debug_log_format("Orchestrator called: {0}", [boards[0].is_some() as Field]);
-
         for i in 0..3 {
             if ((i == 0) & boards[0].is_none()) {
                 // #### Open channel ####
@@ -421,7 +418,6 @@ contract TicTacToe {
                         FunctionSelector::from_signature("turn(Field)"),
                         [game_id]
                     )[0] as bool;
-                debug_log_format("End condition: {0}", [end_condition as Field]);
             }
         }
 

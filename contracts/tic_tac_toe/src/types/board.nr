@@ -48,14 +48,14 @@ impl BoardNote {
     pub fn new(challenger: AztecAddress, host: AztecAddress) -> Self {
 
         BoardNote {
-            challenger,
             host,
-            moves: [0; 9],
-            over: false,
-            timeout_nullifier: 0,
-            turn: 0,
-            last_coordinate: 0,
+            challenger,
             nullifier: rand(),
+            timeout_nullifier: 0,
+            moves: [0; 9],
+            last_coordinate: 0,
+            turn: 0,
+            over: false,
             header: NoteHeader::empty(),
         }
     }
@@ -115,17 +115,6 @@ impl BoardNote {
                 self.timeout_nullifier
             ], 0)
         } else {
-            // let recipient = if (self.turn & 1) == 0 {
-            //     self.host
-            // } else {
-            //     self.challenger
-            // };
-            // let secret = context.request_nullifier_secret_key(recipient);
-            // pedersen_hash([
-            //     note_hash_for_nullify,
-            //     secret.low,
-            //     secret.high,
-            // ], 0)
             pedersen_hash([
                 note_hash_for_nullify,
                 self.nullifier
@@ -144,17 +133,6 @@ impl BoardNote {
                 self.timeout_nullifier
             ], 0)
         } else {
-            // let recipient = if (self.turn & 1) == 0 {
-            //     self.host
-            // } else {
-            //     self.challenger
-            // };
-            // let secret = get_nullifier_secret_key(recipient);
-            // pedersen_hash([
-            //     note_hash_for_nullify,
-            //     secret.low,
-            //     secret.high,
-            // ], 0)
             pedersen_hash([
                 note_hash_for_nullify,
                 self.nullifier

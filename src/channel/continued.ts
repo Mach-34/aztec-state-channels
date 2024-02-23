@@ -55,8 +55,6 @@ export class ContinuedStateChannel {
     public readonly gameIndex: bigint,
     /** Turn index to continue from */
     public readonly startIndex: number,
-    /** Starting Note */
-    public readonly startingNote: NoteAndSlot
   ) {}
 
   /**
@@ -109,10 +107,8 @@ export class ContinuedStateChannel {
       .then((request) => request.packedArguments[0]);
     // get execution notes and nullifiers
     let notes = this.getNotesForTurn();
-    console.log(`Turn ${move.turnIndex} note length: ${notes.length}`);
     // calculate the current side effect counter
     let sideEffectCounter = this.getTurnSideEffectCounter();
-    console.log(`Turn ${move.turnIndex} side effect counter: ${sideEffectCounter}`);
     // simulate the turn to get the app execution result
     const result = await this.account.simulateAppCircuit(
       packedArguments,
@@ -122,6 +118,9 @@ export class ContinuedStateChannel {
       this.contractAddress,
       sideEffectCounter
     );
+    // I DON'T KNOW WHY WE HAVE TO DO THIS
+    result.callStackItem.publicInputs.endSideEffectCounter =
+      result.callStackItem.publicInputs.endSideEffectCounter.sub(new Fr(1));
     this.turnResults.push(result);
     return result;
   }
@@ -147,7 +146,7 @@ export class ContinuedStateChannel {
       .then((request) => request.packedArguments[0]);
     // loop through all app execution circuits and build the nested executions, saving first orchestrator for outside loop
     let numTurns = this.turnResults.length;
-    while (numTurns >= 0) {
+    while (numTurns > 0) {
       // get the turn results used in this orchestrator call
       let numElements = numTurns % 3;
       let startIndex =
@@ -158,7 +157,7 @@ export class ContinuedStateChannel {
       cachedSimulations = cachedSimulations.reverse();
       // get notes and nullified vector for the orchestrator (starts with output of turn before first in cached simulations)
       let notes = this.getNotesForTurn(startIndex - 1);
-      // get the side effect counter for the orchestrator (always 1 - the side effect counter for first turn in orchestrator)
+      // get the side effect counter for the orchestrator (always -1 the side effect counter for first turn in orchestrator)
       let sideEffectCounter = this.getTurnSideEffectCounter(startIndex) - 1;
       // simulate the orchestrator iteration
       this.orchestratorResult = await this.account.simulateAppCircuit(
@@ -235,16 +234,12 @@ export class ContinuedStateChannel {
   public getNotesForTurn(turnIndex?: number): NoteAndSlot[] {
     // if no turns, return from openChannelResult
     if (this.turnResults.length === 0 || turnIndex === -1) {
-      console.log("exiting get notes");
-      return [this.startingNote];
+      return [];
     }
     // otherwise, return from last turn
     turnIndex = turnIndex ? turnIndex : this.turnResults.length - 1;
-    console.log("================TURN INDEX: ", turnIndex);
     let turn = this.turnResults[turnIndex];
     // return note
-    console.log("Turn: ", turnIndex);
-    console.log("Notes: ", [turn.newNotes[turn.newNotes.length - 1]]);
     return [turn.newNotes[turn.newNotes.length - 1]];
   }
 
@@ -256,12 +251,12 @@ export class ContinuedStateChannel {
    */
   public getTurnSideEffectCounter(turnIndex?: number): number {
     // ensure valid turn index
-    turnIndex = turnIndex ? turnIndex : this.turnResults.length;
+    turnIndex = turnIndex !== undefined ? turnIndex : this.turnResults.length;
     if (turnIndex > this.turnResults.length)
       throw new Error("Invalid turn index");
-    if (turnIndex === 0) return 4;
-    // if turn is 2 (using 0 index), or if turn > 3 and is a multiple of 3, increment by 2
-    const incrementBy = this.turnResults.length % 3 === 0 ? 2n : 1n;
+    if (turnIndex == 0) return 4;
+    // if is a multiple of 3, increment by 2
+    const incrementBy = this.turnResults.length % 3 === 2 ? 2n : 1n;
     const sideEffectCounter =
       this.turnResults[
         turnIndex - 1

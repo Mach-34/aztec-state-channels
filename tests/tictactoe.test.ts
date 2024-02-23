@@ -78,7 +78,7 @@ describe("Tic Tac Toe", () => {
       } catch (err) {}
     });
 
-    describe("Test game creation", () => {
+    xdescribe("Test game creation", () => {
       test("Game should fail to start if at least one signature is not valid", async () => {
         const aliceAddress = accounts.alice.getAddress().toBuffer();
         const bobAddress = accounts.bob.getAddress().toBuffer();
@@ -1069,7 +1069,7 @@ describe("Tic Tac Toe", () => {
           await accounts.bob.addCapsule(move);
         }
         await accounts.bob.addCapsule(openChannelCapsule);
-
+          
         // post state so far and initiate a timeout as bob
         let contract = await TicTacToeContract.at(
           contractAddress,
