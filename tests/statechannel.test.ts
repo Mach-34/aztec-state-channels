@@ -24,7 +24,7 @@ const {
   SECONDARY_PXE_URL = "http://localhost:8085",
 } = process.env;
 
-xdescribe("State Channel Test With Two PXEs", () => {
+describe("State Channel Test With Two PXEs", () => {
   jest.setTimeout(1500000);
   let contractAddress: AztecAddress;
   let cc: CheatCodes;
