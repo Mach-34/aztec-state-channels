@@ -669,7 +669,6 @@ describe("State Channel Test With Two PXEs", () => {
       ).send().wait();
       // verify that the game has been terminated with bob as winner
       const game = await contract.methods.get_game(gameIndex).view();
-      console.log("game", game);
       expect(game.over).toEqual(true);
       expect(game.winner.inner).toEqual(accounts.bob.getAddress().toBigInt());
       // verify no timeout
