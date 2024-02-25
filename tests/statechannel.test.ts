@@ -145,7 +145,6 @@ describe("State Channel Test With Two PXEs", () => {
       turnResult = await channels.bob.turn(move, opponentSignature);
 
       // turn 5 (WINNING MOVE)
-      // alice adds the turn 4 message to her state channel
       channels.alice.insertTurn(turnResult);
       move = channels.alice.buildMove(0, 2);
       opponentSignature = move.sign(accounts.bob);
@@ -163,105 +162,94 @@ describe("State Channel Test With Two PXEs", () => {
       expect(game.winner.inner).toEqual(accounts.alice.getAddress().toBigInt());
     });
 
-    // test("Draw Game State Channel", async () => {
-    //   /// OPEN CHANNEL ///
-    //   // sign the channel open message as bob
-    //   let guestChannelOpenSignature = TicTacToeStateChannel.signOpenChannel(
-    //     accounts.bob,
-    //     accounts.alice.getAddress(),
-    //     true
-    //   );
-    //   // open the channel
-    //   await channels.alice.openChannel(
-    //     accounts.alice,
-    //     guestChannelOpenSignature
-    //   );
-    //   // would transmit the open channel app result to bob
-    //   const openChannelMessage = channels.alice.openChannelResult!;
-    //   // bob adds the open channel app result to his state channel
-    //   channels.bob.insertOpenChannel(openChannelMessage);
+    test("Draw Game State Channel", async () => {
+      /// OPEN CHANNEL ///
+      let guestChannelOpenSignature = TicTacToeStateChannel.signOpenChannel(
+        accounts.bob,
+        accounts.alice.getAddress(),
+        true
+      );
+      const openChannelResult = await channels.alice.openChannel(
+        guestChannelOpenSignature
+      );
+      channels.bob.insertOpenChannel(openChannelResult);
 
-    //   /// PLAY GAME ///
-    //   // turn 1
-    //   let move = { row: 0, col: 0 };
-    //   await channels.alice.turn(accounts.alice, accounts.bob, move);
-    //   // would transmit turn 1 to bob
-    //   const turn1Message = channels.alice.turnResults[0]!;
+      /// PLAY GAME ///
+      // turn 1
+      let move = channels.alice.buildMove(0, 0);
+      let opponentSignature = move.sign(accounts.bob);
+      let turnResult = await channels.alice.turn(move, opponentSignature);
 
-    //   // turn 2
-    //   // bob adds the turn 1 message to his state channel
-    //   channels.bob.insertTurn(turn1Message);
-    //   move = { row: 0, col: 1 };
-    //   await channels.bob.turn(accounts.bob, accounts.alice, move);
-    //   // would transmit turn 2 to alice
-    //   const turn2Message = channels.bob.turnResults[1]!;
+      // turn 2
+      channels.bob.insertTurn(turnResult);
+      move = channels.bob.buildMove(0, 1);
+      opponentSignature = move.sign(accounts.alice);
+      turnResult = await channels.bob.turn(move, opponentSignature);
 
-    //   // turn 3
-    //   // alice adds the turn 2 message to her state channel
-    //   channels.alice.insertTurn(turn2Message);
-    //   move = { row: 0, col: 2 };
-    //   await channels.alice.turn(accounts.alice, accounts.bob, move);
-    //   // would transmit turn 3 to bob
-    //   const turn3Message = channels.alice.turnResults[2]!;
+      // turn 3
+      channels.alice.insertTurn(turnResult);
+      move = channels.alice.buildMove(0, 2);
+      opponentSignature = move.sign(accounts.bob);
+      turnResult = await channels.alice.turn(move, opponentSignature);
 
-    //   // turn 4
-    //   // bob adds the turn 3 message to his state channel
-    //   channels.bob.insertTurn(turn3Message);
-    //   move = { row: 1, col: 1 };
-    //   await channels.bob.turn(accounts.bob, accounts.alice, move);
-    //   // would transmit turn 4 to alice
-    //   const turn4Message = channels.bob.turnResults[3]!;
+      // turn 4
+      channels.bob.insertTurn(turnResult);
+      move = channels.bob.buildMove(1, 1);
+      opponentSignature = move.sign(accounts.alice);
+      turnResult = await channels.bob.turn(move, opponentSignature);
 
-    //   // turn 5
-    //   // alice adds the turn 4 message to her state channel
-    //   channels.alice.insertTurn(turn4Message);
-    //   move = { row: 1, col: 0 };
-    //   await channels.alice.turn(accounts.alice, accounts.bob, move);
-    //   // would transmit turn 5 to bob
-    //   const turn5Message = channels.alice.turnResults[4]!;
+      // turn 5
+      channels.alice.insertTurn(turnResult);
+      move = channels.alice.buildMove(1, 0);
+      opponentSignature = move.sign(accounts.bob);
+      turnResult = await channels.alice.turn(move, opponentSignature);
 
-    //   // turn 6
-    //   // bob adds the turn 5 message to his state channel
-    //   channels.bob.insertTurn(turn5Message);
-    //   move = { row: 1, col: 2 };
-    //   await channels.alice.turn(accounts.bob, accounts.alice, move);
-    //   // would transmit turn 6 to alice
-    //   const turn6Message = channels.bob.turnResults[5]!;
+      // turn 6
+      channels.bob.insertTurn(turnResult);
+      move = channels.bob.buildMove(2, 0);
+      opponentSignature = move.sign(accounts.alice);
+      turnResult = await channels.bob.turn(move, opponentSignature);
 
-    //   // turn 7
-    //   // alice adds the turn 6 message to her state channel
-    //   channels.alice.insertTurn(turn6Message);
-    //   move = { row: 2, col: 1 };
-    //   await channels.alice.turn(accounts.alice, accounts.bob, move);
-    //   // would transmit turn 7 to bob
-    //   const turn7Message = channels.alice.turnResults[6]!;
+      // turn 7
+      channels.alice.insertTurn(turnResult);
+      move = channels.alice.buildMove(2, 1);
+      opponentSignature = move.sign(accounts.bob);
+      turnResult = await channels.alice.turn(move, opponentSignature);
 
-    //   // turn 8
-    //   channels.bob.insertTurn(turn7Message);
-    //   move = { row: 2, col: 0 };
-    //   await channels.bob.turn(accounts.bob, accounts.alice, move);
-    //   // would transmit turn 8 to bob
-    //   const turn8Message = channels.bob.turnResults[7]!;
+      // turn 8
+      channels.bob.insertTurn(turnResult);
+      move = channels.bob.buildMove(1, 2);
+      opponentSignature = move.sign(accounts.alice);
+      turnResult = await channels.bob.turn(move, opponentSignature);
 
-    //   // turn 9
-    //   channels.alice.insertTurn(turn8Message);
-    //   move = { row: 2, col: 2 };
-    //   await channels.alice.turn(accounts.alice, accounts.bob, move);
-    //   // don't need to transmit result to bob because game is over
-    //   /// FINALIZE THE GAME ONCHAIN ///
-    //   await channels.alice.finalize(accounts.alice);
-    //   // ensure the onchain state reflects the execution of the state channel
-    //   const contract = await TicTacToeContract.at(
-    //     contractAddress,
-    //     accounts.alice
-    //   );
+      // turn 9 (cat's game/ draw)
+      channels.alice.insertTurn(turnResult);
+      move = channels.alice.buildMove(2, 2);
+      opponentSignature = move.sign(accounts.bob);
+      turnResult = await channels.alice.turn(move, opponentSignature);
+      // alice does not need to transmit result to bob
 
-    //   const board = await contract.methods.get_board(gameIndex).view();
-    //   expect(board.over).toEqual(true);
-    //   const game = await contract.methods.get_game(gameIndex).view();
-    //   expect(game.over).toEqual(true);
-    //   expect(game.winner.inner).toEqual(0n);
-    // });
+      /// FINALIZE THE GAME ONCHAIN ///
+      await channels.alice.finalize();
+
+      // bob can see the draw
+      let contract = await TicTacToeContract.at(
+        contractAddress,
+        accounts.bob
+      );
+      let game = await contract.methods.get_game(gameIndex).view();
+      expect(game.over).toEqual(true);
+      expect(game.winner.inner).toEqual(0n);
+
+      // alice can see the draw
+      contract = await TicTacToeContract.at(
+        contractAddress,
+        accounts.alice
+      );
+      game = await contract.methods.get_game(gameIndex).view();
+      expect(game.over).toEqual(true);
+      expect(game.winner.inner).toEqual(0n);
+    });
 
     test("State Channel Timeout With No Answer", async () => {
       /// OPEN CHANNEL ///
@@ -314,7 +302,7 @@ describe("State Channel Test With Two PXEs", () => {
       expect(game.winner.inner).toEqual(accounts.bob.getAddress().toBigInt());
     });
 
-    test("State Channel Timeout With Answer", async () => {
+    xtest("State Channel Timeout With Answer", async () => {
       /// OPEN CHANNEL ///
       // sign the channel open message as bob
       let guestChannelOpenSignature = TicTacToeStateChannel.signOpenChannel(

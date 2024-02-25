@@ -417,9 +417,12 @@ contract TicTacToe {
             assert(!board.over, "Game has ended."); // If game is over then revert
         }
 
+        debug_log_format("Board exists?: {0}", [boards[0].is_some() as Field]);
+
         // trigger this round of turns
         let mut end_condition = false;
         for i in 0..3 {
+            debug_log_format("Turn index: {0}", [turn_index - 3 + i as Field]);
             if ((i == 0) & boards[0].is_none()) {
                 // #### Open channel ####
                 let _ = context.call_private_function(

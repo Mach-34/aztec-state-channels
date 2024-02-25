@@ -147,7 +147,8 @@ impl BoardNote {
     }
 
     pub fn broadcast(self, context: &mut PrivateContext, slot: Field) {
-        // If timeout is triggered then broadcast note to both players in game
+        // If timeout is triggered or game is over then broadcast note to both players in game
+        // essentially handles any case where note goes onchain/ channel is posted
         if((self.timeout_nullifier != 0) | self.over) {
             let recipients = [self.host, self.challenger];
             for i in 0..2 {

@@ -32,6 +32,8 @@ export type OpenChannelSignature = {
   sig: [Fr, Fr, Fr];
 };
 
+// orchestrator and open_channel will always start with side effect 3
+const START_SIDE_EFFECT = 3;
 export class TicTacToeStateChannel {
   /** Simulation of the `open_channel` app circuit */
   public openChannelResult: AppExecutionResult | undefined;
@@ -44,7 +46,7 @@ export class TicTacToeStateChannel {
   public functionSelectors = {
     open: FunctionSelector.fromSignature("open_channel(Field)"),
     turn: FunctionSelector.fromSignature("turn(Field)"),
-    orchestrate: FunctionSelector.fromSignature("orchestrator(Field)"),
+    orchestrate: FunctionSelector.fromSignature("orchestrator(Field,Field)"),
   };
 
   constructor(
@@ -99,7 +101,9 @@ export class TicTacToeStateChannel {
    * @param account - the account wallet to use within the PXE with this contract
    * @param guestSignature - the `challenger` signature consenting to the channel open
    */
-  public async openChannel(guestSignature: OpenChannelSignature): Promise<AppExecutionResult> {
+  public async openChannel(
+    guestSignature: OpenChannelSignature
+  ): Promise<AppExecutionResult> {
     // ensure channel is not already opened
     if (this.openChannelResult) {
       throw new Error(`Channel for game id ${this.gameIndex} already opened!`);
@@ -132,14 +136,13 @@ export class TicTacToeStateChannel {
       .create()
       .then((request) => request.packedArguments[0]);
     // simulate the open_channel call
-    let sideEffectCounter = 3; // always 3 on open_channel
     this.openChannelResult = await this.account.simulateAppCircuit(
       packedArguments,
       this.functionSelectors.open,
       [], // no notes
       this.contractAddress,
       this.contractAddress,
-      sideEffectCounter
+      START_SIDE_EFFECT
     );
     return this.openChannelResult;
   }
@@ -184,7 +187,7 @@ export class TicTacToeStateChannel {
         sender: move.sign(this.account),
         opponent: opponentSignature,
       },
-      timeout: opponentSignature === undefined
+      timeout: opponentSignature === undefined,
     });
     await this.account.addCapsule(turnCapsule);
     // get the packed arguments for the call
@@ -221,49 +224,14 @@ export class TicTacToeStateChannel {
         `Channel for game id ${this.gameIndex} already orchestrated!`
       );
     }
-    // ensure the game is over
-    // if (!this.checkChannelOver()) {
-    //   throw new Error(`Game for game id ${this.gameIndex} is not over yet!`);
-    // }
     // get contract
     const contract = await this.getContract();
-    // get the packed arguments for the call (reusable)
+    // build the first orchestrator call
     let packedArguments = await contract.methods
-      // .orchestrator(this.gameIndex)
-      .orchestrator(this.gameIndex, 0n)
+      .orchestrator(this.gameIndex, 3)
       .create()
       .then((request) => request.packedArguments[0]);
-    // loop through all app execution circuits and build the nested executions, saving first orchestrator for outside loop
-    let numTurns = this.turnResults.length;
-    while (numTurns > 2) {
-      // get the turn results used in this orchestrator call
-      let numElements = (numTurns - 2) % 3;
-      let startIndex =
-        numElements === 0 ? numTurns - 3 : numTurns - numElements;
-      let cachedSimulations = this.turnResults.slice(startIndex, numTurns);
-      if (this.orchestratorResult)
-        cachedSimulations.push(this.orchestratorResult);
-      cachedSimulations = cachedSimulations.reverse();
-      // get notes and nullified vector for the orchestrator (starts with output of turn before first in cached simulations)
-      let notes = this.getNotesForTurn(startIndex - 1);
-      // get the side effect counter for the orchestrator (always 1 - the side effect counter for first turn in orchestrator)
-      let sideEffectCounter = this.getTurnSideEffectCounter(startIndex) - 1;
-      // simulate the orchestrator iteration
-      this.orchestratorResult = await this.account.simulateAppCircuit(
-        packedArguments,
-        this.functionSelectors.orchestrate,
-        notes,
-        this.contractAddress,
-        this.contractAddress,
-        sideEffectCounter,
-        cachedSimulations
-      );
-      // decrement numTurns according to the number of simulations cached
-      numTurns = startIndex;
-    }
-    // simulate the first orchestrator with the open channel result
     let cachedSimulations = [
-      this.orchestratorResult!,
       this.turnResults[1],
       this.turnResults[0],
       this.openChannelResult!,
@@ -272,11 +240,52 @@ export class TicTacToeStateChannel {
       packedArguments,
       this.functionSelectors.orchestrate,
       [],
-      this.account.getAddress(),
       this.contractAddress,
-      3, // always 3 for first side effect counter
+      this.contractAddress,
+      START_SIDE_EFFECT,
       cachedSimulations
     );
+
+    console.log("Got cached simulation?: ", this.orchestratorResult !== undefined);
+    // loop through remaining calls
+    let startIndex = 2;
+    while (startIndex < this.turnResults.length) {
+      // get the # of turns to use in this orchestrator call
+      let numTurns = 3;
+      let orchestratorStart = startIndex + 3 + 1;
+      if (this.turnResults.length < startIndex + 3) {
+        numTurns = this.turnResults.length - startIndex;
+      }
+      if (this.turnResults.length <= startIndex + 3) {
+        orchestratorStart = this.turnResults.length + 1;
+      }
+      // get the packed arguments for the call
+      packedArguments = await contract.methods
+        .orchestrator(this.gameIndex, orchestratorStart)
+        .create()
+        .then((request) => request.packedArguments[0]);
+      // get the turn results used in this orchestrator call
+      let cachedSimulations = this.turnResults.slice(
+        startIndex,
+        startIndex + numTurns
+      );
+      cachedSimulations = [this.orchestratorResult].concat(cachedSimulations).reverse();
+      // let notes = this.orchestratorResult.newNotes[this.orchestratorResult.newNotes.length - 1];
+      let notes = this.turnResults[startIndex - 1].newNotes[this.turnResults[startIndex - 1].newNotes.length - 1];
+      // simulate the orchestrator iteration
+      let msgSender = this.turnResults.length <= startIndex + 3 ? this.account.getAddress() : this.contractAddress;
+      this.orchestratorResult = await this.account.simulateAppCircuit(
+        packedArguments,
+        this.functionSelectors.orchestrate,
+        [notes],
+        msgSender,
+        this.contractAddress,
+        START_SIDE_EFFECT,
+        cachedSimulations
+      );
+      // increment the start index by 3
+      startIndex += 3;
+    }
   }
 
   /**
@@ -293,7 +302,9 @@ export class TicTacToeStateChannel {
     // get contract
     const contract = await this.getContract();
     // construct the full tx request to post on chain
-    let request = await contract.methods.orchestrator(this.gameIndex, 0n).create();
+    let request = await contract.methods
+      .orchestrator(this.gameIndex, this.turnResults.length + 1)
+      .create();
     let tx = await this.account.proveSimulatedAppCircuits(
       request,
       this.orchestratorResult!
@@ -347,14 +358,17 @@ export class TicTacToeStateChannel {
    */
   public getNotesForTurn(turnIndex?: number): NoteAndSlot[] {
     // if no turns, return from openChannelResult
-    if (this.turnResults.length === 0) {
+    if (
+      this.turnResults.length === 0 ||
+      (turnIndex != undefined && turnIndex < 1)
+    ) {
       return this.openChannelResult!.newNotes;
     }
     // otherwise, return from last turn
     turnIndex = turnIndex ? turnIndex : this.turnResults.length - 1;
     let turn = this.turnResults[turnIndex];
     // return notes and nullified vector
-    return [turn.newNotes[turn.newNotes.length - 1]]
+    return [turn.newNotes[turn.newNotes.length - 1]];
   }
 
   /**
@@ -376,7 +390,7 @@ export class TicTacToeStateChannel {
     } else {
       // if turn is 2 (using 0 index), or if turn > 3 and is a multiple of 3, increment by 2
       let incrementBy =
-        turnIndex === 2 || (turnIndex > 3 && turnIndex % 3 === 2) ? 2n : 1n;
+        turnIndex === 2 || (turnIndex > 3 && turnIndex % 3 === 2) ? 3n : 1n;
       sideEffectCounter =
         this.turnResults[
           turnIndex - 1
