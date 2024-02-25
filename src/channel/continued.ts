@@ -48,8 +48,6 @@ export class ContinuedStateChannel {
   };
 
   constructor(
-    /** PXE Client */
-    public readonly pxe: PXE,
     /** Account to sign and send with */
     public readonly account: AccountWalletWithPrivateKey,
     /** Contract address of deployed tic_tac_toe.nr instance */
@@ -65,14 +63,15 @@ export class ContinuedStateChannel {
    *
    * @param row - the x coordinate of the move
    * @param col - the y coordinate of the move
+   * @param turn - optionally provide the turn index of the move
    * @returns - a move message for the given game and turn
    */
-  public buildMove(row: number, col: number): Move {
+  public buildMove(row: number, col: number, turn?: number): Move {
     return new Move(
       this.account.getAddress(),
       row,
       col,
-      this.turnResults.length + this.startIndex,
+      turn ?? this.turnResults.length + this.startIndex,
       this.gameIndex
     );
   }
@@ -110,14 +109,10 @@ export class ContinuedStateChannel {
       .then((request) => request.packedArguments[0]);
     // get execution notes and nullifiers
     let notes = this.getNotesForTurn();
-    if (notes.length != 0) {
-      console.log("Notes: ", notes[0].note.items.map((item) => item.toString()));
-    }
+
     // calculate the current side effect counter
     let sideEffectCounter = this.getTurnSideEffectCounter();
-    console.log(
-      `On turn ${move.turnIndex} use side effect ${sideEffectCounter}`
-    );
+
     // simulate the turn to get the app execution result
     const result = await this.account.simulateAppCircuit(
       packedArguments,
@@ -286,8 +281,6 @@ export class ContinuedStateChannel {
     // otherwise, return from last turn
     turnIndex = turnIndex ? turnIndex : this.turnResults.length - 1;
     let turn = this.turnResults[turnIndex];
-    console.log("Turn Index: ", turnIndex);
-    console.log("Turn notes len: ", turn.newNotes.length);
     // return note
     return [turn.newNotes[turn.newNotes.length - 1]];
   }
@@ -305,7 +298,7 @@ export class ContinuedStateChannel {
       throw new Error("Invalid turn index");
     if (turnIndex == 0) return 4;
     // if is a multiple of 3, increment by 2
-    const incrementBy = this.turnResults.length % 3 === 2 ? 3n : 1n;
+    const incrementBy = this.turnResults.length % 3 === 0 ? 3n : 1n;
     const sideEffectCounter =
       this.turnResults[
         turnIndex - 1

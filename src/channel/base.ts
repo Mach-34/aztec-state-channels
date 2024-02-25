@@ -45,8 +45,6 @@ export class BaseStateChannel {
   };
 
   constructor(
-    /** PXE Client */
-    public readonly pxe: PXE,
     /** Account to sign and send with */
     public readonly account: AccountWalletWithPrivateKey,
     /** Contract address of deployed tic_tac_toe.nr instance */
@@ -147,14 +145,15 @@ export class BaseStateChannel {
    *
    * @param row - the x coordinate of the move
    * @param col - the y coordinate of the move
+   * @param turnIndex - optionally provide the turn index of the move
    * @returns - a move message for the given game and turn
    */
-  public buildMove(row: number, col: number): Move {
+  public buildMove(row: number, col: number, turnIndex?: number): Move {
     return new Move(
       this.account.getAddress(),
       row,
       col,
-      this.turnResults.length,
+      turnIndex ?? this.turnResults.length,
       this.gameIndex
     );
   }
@@ -316,7 +315,7 @@ export class BaseStateChannel {
       this.orchestratorResult!
     );
     // broadcast the transaction
-    let result = await new SentTx(this.pxe, this.account.sendTx(tx)).wait();
+    let result = await new SentTx(this.account, this.account.sendTx(tx)).wait();
     if (result.status !== TxStatus.MINED)
       throw new Error(`State channel finalization status is ${result.status}`);
     return this.account.getTxReceipt(result.txHash);

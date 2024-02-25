@@ -84,13 +84,11 @@ describe("State Channel Test With Two PXEs", () => {
       gameIndex++;
       channels = {
         alice: new BaseStateChannel(
-          alicePXE,
           accounts.alice,
           contractAddress,
           gameIndex
         ),
         bob: new BaseStateChannel(
-          bobPXE,
           accounts.bob,
           contractAddress,
           gameIndex
@@ -359,14 +357,12 @@ describe("State Channel Test With Two PXEs", () => {
 
       const continued = {
         alice: new ContinuedStateChannel(
-          alicePXE,
           accounts.alice,
           contractAddress,
           gameIndex,
           3
         ),
         bob: new ContinuedStateChannel(
-          bobPXE,
           accounts.bob,
           contractAddress,
           gameIndex,
@@ -386,7 +382,6 @@ describe("State Channel Test With Two PXEs", () => {
       turnResult = await continued.alice.turn(move, opponentSignature);
 
       // finalize continued game
-      await accounts.alice.addNote(note);
       await continued.alice.finalize();
 
       // check alice won
@@ -394,7 +389,7 @@ describe("State Channel Test With Two PXEs", () => {
       expect(game.winner.inner).toEqual(accounts.alice.getAddress().toBigInt());
     });
 
-    xtest("State Channel Timeout Answered (Won by Timeout Initiator)", async () => {
+    test("State Channel Timeout Answered (Won by Timeout Initiator)", async () => {
       /// OPEN CHANNEL ///
       // sign the channel open message as bob
       let guestChannelOpenSignature = BaseStateChannel.signOpenChannel(
@@ -448,21 +443,16 @@ describe("State Channel Test With Two PXEs", () => {
 
       // get starting note as bob
       let txHash = answer_res.txHash;
-      const note = await accounts.bob
-        .getNotes({ txHash })
-        .then((notes) => notes[0]);
 
       /// CONTINUE GAME TO COMPLETION ///
       const continued = {
         alice: new ContinuedStateChannel(
-          alicePXE,
           accounts.alice,
           contractAddress,
           gameIndex,
           3
         ),
         bob: new ContinuedStateChannel(
-          bobPXE,
           accounts.bob,
           contractAddress,
           gameIndex,
@@ -471,45 +461,86 @@ describe("State Channel Test With Two PXEs", () => {
       };
 
       // turn 4
-      move = continued.bob.buildMove(2, 1);
+      move = continued.bob.buildMove(1, 2);
       opponentSignature = move.sign(accounts.alice);
       turnResult = await continued.bob.turn(move, opponentSignature);
-      const note2 = await accounts.bob
-        .getNotes({ txHash });
-      console.log("note2: ", note2.length);
 
       // turn 5
       continued.alice.insertTurn(turnResult);
-      move = continued.alice.buildMove(1, 2);
+      move = continued.alice.buildMove(2, 1);
       opponentSignature = move.sign(accounts.bob);
       turnResult = await continued.alice.turn(move, opponentSignature);
-      console.log("x0");
+
       // turn 6
       continued.bob.insertTurn(turnResult);
       move = continued.bob.buildMove(0, 1);
       opponentSignature = move.sign(accounts.alice);
       turnResult = await continued.bob.turn(move, opponentSignature);
 
-      console.log("x1");
       // turn 7
       continued.alice.insertTurn(turnResult);
       move = continued.alice.buildMove(2, 0);
       opponentSignature = move.sign(accounts.bob);
       turnResult = await continued.alice.turn(move, opponentSignature);
-      console.log("x2");
+
       // turn 8 (WINNING MOVE)
       continued.bob.insertTurn(turnResult);
       move = continued.bob.buildMove(0, 2);
       opponentSignature = move.sign(accounts.alice);
       turnResult = await continued.bob.turn(move, opponentSignature);
-      console.log("x3");
+
       // finalize continued game
-      await accounts.bob.addNote(note);
       await continued.bob.finalize();
 
       // check bob won
       const game = await contract.methods.get_game(gameIndex).view();
       expect(game.winner.inner).toEqual(accounts.bob.getAddress().toBigInt());
     });
+
+    test("Double spend fraud", async () => {
+      /// OPEN CHANNEL ///
+      // this is needed for the double spend fraud claim
+      let guestChannelOpenSignature = BaseStateChannel.signOpenChannel(
+        accounts.bob,
+        accounts.alice.getAddress(),
+        true
+      );
+      const openChannelResult = await channels.alice.openChannel(
+        guestChannelOpenSignature
+      );
+      channels.bob.insertOpenChannel(openChannelResult);
+
+      /// PLAY GAME ///
+      // these turns are not used and just simulate an example of a game
+
+      // turn 1
+      let move = channels.alice.buildMove(0, 0);
+      let opponentSignature = move.sign(accounts.bob);
+      let turnResult = await channels.alice.turn(move, opponentSignature);
+
+      // turn 2
+      channels.bob.insertTurn(turnResult);
+      move = channels.bob.buildMove(1, 0);
+      opponentSignature = move.sign(accounts.alice);
+      turnResult = await channels.bob.turn(move, opponentSignature);
+
+      // turn 3
+      channels.alice.insertTurn(turnResult);
+      move = channels.alice.buildMove(0, 1);
+      opponentSignature = move.sign(accounts.bob);
+      // alice would send her signature over move to bob at this point
+      // this is omitted in above tests because it is only checked client side
+      let realSignature = move.sign(accounts.alice);
+      turnResult = await channels.alice.turn(move, opponentSignature);
+
+      /// MAKE FRAUDULENT DOUBLE-SPEND TURN ///
+      // ALICE "DOUBLE SPENDS" TURN 3
+      let fraudMove = channels.alice.buildMove(0, 2);
+      let fraudSignature = fraudMove.sign(accounts.alice);
+      // alice needs a signature on this new double-spend move and transmits it to bob
+
+      /// PROVE FRAUDULENT DOUBLE-SPEND TURN ///
+
+    })
   });
 });
