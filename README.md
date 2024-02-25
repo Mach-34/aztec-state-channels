@@ -23,7 +23,7 @@ PARENT_DIR/
 
 a. clone the repo in your parent dir: `git clone https://github.com/mach-34/aztec-packages && cd aztec-packages`
 
-b. ensure you are on the right branch: `git checkout app_circuit_pxe
+b. ensure you are on the right branch: `git checkout app_circuit_pxe`
 
 c. build the entire aztec-packages stack locally: `./bootstrap.sh`
 - This can take over an hour. If you have a compatible version of aztec-packages already built locally, you can skip 99% of build time by only building yarn_project: `cd yarn_project && bootstrap.sh`
