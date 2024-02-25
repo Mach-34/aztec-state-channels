@@ -141,7 +141,8 @@ export class ContinuedStateChannel {
     const contract = await this.getContract();
     // get the packed arguments for the call (reusable)
     let packedArguments = await contract.methods
-      .orchestrator(this.gameIndex)
+      // .orchestrator(this.gameIndex)
+      .orchestrator(this.gameIndex, 0n)
       .create()
       .then((request) => request.packedArguments[0]);
     // loop through all app execution circuits and build the nested executions, saving first orchestrator for outside loop
@@ -188,7 +189,7 @@ export class ContinuedStateChannel {
     // get contract
     const contract = await this.getContract();
     // construct the full tx request to post on chain
-    let request = await contract.methods.orchestrator(this.gameIndex).create();
+    let request = await contract.methods.orchestrator(this.gameIndex, 0n).create();
     let tx = await this.account.proveSimulatedAppCircuits(
       request,
       this.orchestratorResult!

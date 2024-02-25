@@ -349,10 +349,8 @@ contract TicTacToe {
         let timeout = turn[3] as bool;
         let mut game_over = false;
         legal_move(board.moves, row, col); // Check legal move
-
         // Remove note so we do not have duplicates
         storage.boards.at(game_id).remove(board);
-
         // Set next random nullifier
         board.nullifier = rand();
         let coord = row * 3 + col;
@@ -395,7 +393,23 @@ contract TicTacToe {
     }
 
     #[aztec(private)]
-    fn orchestrator(game_id: Field) {
+    fn orchestrator(game_id: Field, turn_index: Field) {
+        // trigger orchestrator first
+        let turn = turn_index as u8;
+        if turn > 3 {
+            let mut decrement_by = turn % 3;
+            if (decrement_by == 0) {
+                decrement_by = 3;
+            }
+            let inner_index = turn - decrement_by;
+            let _ = context.call_private_function(
+                context.this_address(),
+                FunctionSelector::from_signature("orchestrator(Field,Field)"),
+                [game_id, inner_index as Field]
+            );
+        }
+
+        // check if board is over
         let mut board = BoardNote::new(AztecAddress::from_field(0), AztecAddress::from_field(0));
         let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
         if (boards[0].is_some()) {
@@ -403,6 +417,7 @@ contract TicTacToe {
             assert(!board.over, "Game has ended."); // If game is over then revert
         }
 
+        // trigger this round of turns
         let mut end_condition = false;
         for i in 0..3 {
             if ((i == 0) & boards[0].is_none()) {
@@ -413,21 +428,12 @@ contract TicTacToe {
                     [game_id]
                 );
             } else if (!end_condition) {
-                debug_log_format("Turn {0}", [i as Field]);
                 end_condition = context.call_private_function(
                         context.this_address(),
                         FunctionSelector::from_signature("turn(Field)"),
                         [game_id]
                     )[0] as bool;
             }
-        }
-
-        if (!end_condition) {
-            let _ = context.call_private_function(
-                context.this_address(),
-                FunctionSelector::from_signature("orchestrator(Field)"),
-                [game_id]
-            );
         }
     }
 

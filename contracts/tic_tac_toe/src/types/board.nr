@@ -148,7 +148,7 @@ impl BoardNote {
 
     pub fn broadcast(self, context: &mut PrivateContext, slot: Field) {
         // If timeout is triggered then broadcast note to both players in game
-        if(self.timeout_nullifier != 0) {
+        if((self.timeout_nullifier != 0) | self.over) {
             let recipients = [self.host, self.challenger];
             for i in 0..2 {
                 emit_encrypted_log(
