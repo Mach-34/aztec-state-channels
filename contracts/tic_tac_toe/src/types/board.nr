@@ -11,7 +11,6 @@ use dep::aztec::{
         rand::rand,
         get_public_key::get_public_key,
         nullifier_key::get_nullifier_secret_key,
-        debug_log::{debug_log, debug_log_format}
     },
     protocol_types::{
         address::AztecAddress,

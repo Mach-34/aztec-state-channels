@@ -6,6 +6,7 @@ import {
   createDebugLogger,
   createPXEClient,
   DebugLogger,
+  Fr,
   PXE,
   sleep,
 } from "@aztec/aztec.js";
@@ -15,6 +16,7 @@ import {
   BaseStateChannel,
   ContinuedStateChannel,
   emptyCapsuleStack,
+  verifySchnorr,
 } from "../src/index.js";
 import { ExtendedNote, NoteAndSlot } from "@aztec/circuit-types";
 
@@ -83,16 +85,8 @@ describe("State Channel Test With Two PXEs", () => {
     beforeEach(async () => {
       gameIndex++;
       channels = {
-        alice: new BaseStateChannel(
-          accounts.alice,
-          contractAddress,
-          gameIndex
-        ),
-        bob: new BaseStateChannel(
-          accounts.bob,
-          contractAddress,
-          gameIndex
-        ),
+        alice: new BaseStateChannel(accounts.alice, contractAddress, gameIndex),
+        bob: new BaseStateChannel(accounts.bob, contractAddress, gameIndex),
       };
     });
 
@@ -151,6 +145,7 @@ describe("State Channel Test With Two PXEs", () => {
 
       /// FINALIZE THE GAME ONCHAIN ///
       await channels.alice.finalize();
+
       // bob can see that he is a loser
       const contract = await TicTacToeContract.at(
         contractAddress,
@@ -497,9 +492,16 @@ describe("State Channel Test With Two PXEs", () => {
       expect(game.winner.inner).toEqual(accounts.bob.getAddress().toBigInt());
     });
 
-    test("Double spend fraud", async () => {
+    test("Double Spend Fraud in State Channel", async () => {
       /// OPEN CHANNEL ///
-      // this is needed for the double spend fraud claim
+      // alice would send a signed open channel message to bob
+      // this is omitted in above tests because it is only checked client side
+      // it shown in this step only to simulate real flow
+      let hostOpenChannelSignature = BaseStateChannel.signOpenChannel(
+        accounts.alice,
+        accounts.bob.getAddress()
+      );
+
       let guestChannelOpenSignature = BaseStateChannel.signOpenChannel(
         accounts.bob,
         accounts.alice.getAddress(),
@@ -521,26 +523,161 @@ describe("State Channel Test With Two PXEs", () => {
       // turn 2
       channels.bob.insertTurn(turnResult);
       move = channels.bob.buildMove(1, 0);
+      // bob signs the move before sending it to alice as well
+      // this is omitted in above tests because it is only checked client side
+      // it shown in this step only to simulate real flow
+      let realSignature = move.sign(accounts.bob);
+
+      // alice verifies the signature by bob on move before signing it herself
+      let verifiedMove = verifySchnorr(
+        move.toMessage(),
+        accounts.bob.getCompleteAddress().publicKey,
+        new Uint8Array(realSignature.toBuffer())
+      );
+      expect(verifiedMove);
       opponentSignature = move.sign(accounts.alice);
+
+      // continue expected state channel flow
       turnResult = await channels.bob.turn(move, opponentSignature);
 
       // turn 3
       channels.alice.insertTurn(turnResult);
       move = channels.alice.buildMove(0, 1);
+      // alice signs the move she will eventually double spend and sends it to bob
+      realSignature = move.sign(accounts.alice);
       opponentSignature = move.sign(accounts.bob);
-      // alice would send her signature over move to bob at this point
-      // this is omitted in above tests because it is only checked client side
-      let realSignature = move.sign(accounts.alice);
       turnResult = await channels.alice.turn(move, opponentSignature);
 
       /// MAKE FRAUDULENT DOUBLE-SPEND TURN ///
       // ALICE "DOUBLE SPENDS" TURN 3
-      let fraudMove = channels.alice.buildMove(0, 2);
+      let fraudMove = channels.alice.buildMove(0, 2, move.turnIndex);
       let fraudSignature = fraudMove.sign(accounts.alice);
+
       // alice needs a signature on this new double-spend move and transmits it to bob
 
       /// PROVE FRAUDULENT DOUBLE-SPEND TURN ///
+      // todo: could use simulated result instead of re-proving open_channel
+      // bob must add the open channel capsule to his pxe
+      let openChannelCapsule = [
+        accounts.alice.getAddress(),
+        accounts.bob.getAddress(),
+        ...hostOpenChannelSignature.sig,
+        ...guestChannelOpenSignature.sig,
+        Fr.ZERO,
+        Fr.ZERO,
+      ];
+      await accounts.bob.addCapsule(openChannelCapsule);
+      // send the proof of double spend to the contract
+      let signatures = [realSignature, fraudSignature].map((sig) => [
+        ...new Uint8Array(sig.toBuffer()),
+      ]);
+      const contract = await TicTacToeContract.at(
+        contractAddress,
+        accounts.bob
+      );
 
-    })
+      await contract.methods
+        .claim_fraud_win(
+          gameIndex,
+          fraudMove.turnIndex,
+          [move.row, move.col],
+          [fraudMove.row, fraudMove.col],
+          signatures[0],
+          signatures[1]
+        )
+        .send()
+        .wait();
+
+      // check that the game has been terminated with bob as winner
+      const board = await contract.methods.get_board(gameIndex).view();
+      expect(board.over).toEqual(true);
+
+      const game = await contract.methods.get_game(gameIndex).view();
+      expect(game.winner.inner).toEqual(accounts.bob.getAddress().toBigInt());
+    });
+
+    test("Fraudulent Timeout in State Channel", async () => {
+      // Run a second fraudulent channel as alice to simulate the timeout fraud
+      let fraudChannel = new BaseStateChannel(
+        accounts.alice,
+        contractAddress,
+        gameIndex
+      );
+      /// OPEN CHANNEL ///
+      let guestChannelOpenSignature = BaseStateChannel.signOpenChannel(
+        accounts.bob,
+        accounts.alice.getAddress(),
+        true
+      );
+
+      const openChannelResult = await channels.alice.openChannel(
+        guestChannelOpenSignature
+      );
+      channels.bob.insertOpenChannel(openChannelResult);
+
+      // add open channel to fraud channel
+      fraudChannel.insertOpenChannel(openChannelResult);
+
+      /// PLAY GAME ///
+      // turn 1
+      let move = channels.alice.buildMove(0, 0);
+      let opponentSignature = move.sign(accounts.bob);
+      let turnResult = await channels.alice.turn(move, opponentSignature);
+      // add turn 1 to fraud channel
+      fraudChannel.insertTurn(turnResult);
+
+      // turn 2
+      channels.bob.insertTurn(turnResult);
+      move = channels.bob.buildMove(0, 1);
+      opponentSignature = move.sign(accounts.alice);
+      turnResult = await channels.bob.turn(move, opponentSignature);
+      // add turn 2 to fraud channel
+      fraudChannel.insertTurn(turnResult);
+      // stop adding turns as alice will make fraudulent turn from here
+
+      // turn 3
+      channels.alice.insertTurn(turnResult);
+      move = channels.alice.buildMove(0, 2);
+      opponentSignature = move.sign(accounts.bob);
+      turnResult = await channels.alice.turn(move, opponentSignature);
+
+      // turn 4
+      channels.bob.insertTurn(turnResult);
+      move = channels.bob.buildMove(1, 1);
+      opponentSignature = move.sign(accounts.alice);
+      turnResult = await channels.bob.turn(move, opponentSignature);
+
+      /// MAKE FRAUDULENT TIMEOUT ///
+      // create a different turn for the fraud timeout
+      // could use same turn, wouldn't matter
+      let fraudulentTurn = fraudChannel.buildMove(2, 0);
+      await fraudChannel.turn(fraudulentTurn);
+      // finalize the fraud channel timeout
+      await fraudChannel.finalize();
+
+      /// PROVE TIMEOUT WAS FRAUDULENT ///
+      // dispute the fraudulent timeout onchain
+      const contract = await TicTacToeContract.at(
+        contractAddress,
+        accounts.bob
+      );
+      await contract.methods.dispute_timeout(
+        gameIndex,
+        move.turnIndex,
+        [move.row, move.col],
+        [...new Uint8Array(opponentSignature.toBuffer())]
+      ).send().wait();
+      // verify that the game has been terminated with bob as winner
+      const game = await contract.methods.get_game(gameIndex).view();
+      console.log("game", game);
+      expect(game.over).toEqual(true);
+      expect(game.winner.inner).toEqual(accounts.bob.getAddress().toBigInt());
+      // verify no timeout
+      const noteHash = await contract.methods
+        .get_game_note_hash(gameIndex)
+        .view();
+      const timeoutNullifier = await contract.methods.get_timeout(noteHash).view();
+      expect(timeoutNullifier).toEqual(0n);
+    });
   });
 });

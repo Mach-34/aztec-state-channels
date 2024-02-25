@@ -63,15 +63,15 @@ export class ContinuedStateChannel {
    *
    * @param row - the x coordinate of the move
    * @param col - the y coordinate of the move
-   * @param turn - optionally provide the turn index of the move
+   * @param turnIndex - optionally provide the turn index of the move
    * @returns - a move message for the given game and turn
    */
-  public buildMove(row: number, col: number, turn?: number): Move {
+  public buildMove(row: number, col: number, turnIndex?: number): Move {
     return new Move(
       this.account.getAddress(),
       row,
       col,
-      turn ?? this.turnResults.length + this.startIndex,
+      turnIndex ?? this.turnResults.length + this.startIndex,
       this.gameIndex
     );
   }

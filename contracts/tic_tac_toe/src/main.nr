@@ -363,6 +363,9 @@ contract TicTacToe {
         }
         board.turn += 1;
         if (timeout) {
+            debug_log("Timeout triggered");
+            debug_log_format("Host: {0}", [board.host.to_field()]);
+            debug_log_format("Challenger: {0}", [board.challenger.to_field()]);
             board.timeout_nullifier = rand();
             let note_hash = board.compute_note_hash();
             context.call_public_function(

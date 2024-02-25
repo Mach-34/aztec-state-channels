@@ -315,7 +315,7 @@ export class BaseStateChannel {
       this.orchestratorResult!
     );
     // broadcast the transaction
-    let result = await new SentTx(this.account, this.account.sendTx(tx)).wait();
+    let result = await new SentTx(this.account, this.account.sendTx(tx)).wait({ debug: true });
     if (result.status !== TxStatus.MINED)
       throw new Error(`State channel finalization status is ${result.status}`);
     return this.account.getTxReceipt(result.txHash);

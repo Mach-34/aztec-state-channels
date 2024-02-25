@@ -1,8 +1,7 @@
 use dep::aztec::{
     context::PrivateContext,
     oracle::{
-        get_public_key::get_public_key,
-        debug_log::{debug_log_format, debug_log}
+        get_public_key::get_public_key
     },
     protocol_types::{
         abis::function_selector::FunctionSelector,
@@ -158,9 +157,6 @@ pub fn get_game_turn(game: BoardNote, game_id: Field) -> [Field; 4] {
             move_msg
         )
     };
-
-    debug_log_format("Turn: {0}", [game.turn as Field]);
-    debug_log_format("Verified: ", [sender_verified as Field]);
 
     assert(sender_verified, "Could not verify sender signature.");
 
