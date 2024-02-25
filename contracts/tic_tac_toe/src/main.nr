@@ -21,9 +21,9 @@ contract TicTacToe {
     use crate::{
         types::{board::{BoardNote, BoardNoteMethods, BOARD_NOTE_LEN}, game::{Game, GameMethods, GAME_SERIALIZED_LEN}},
         utils::{
-        can_play, CAPSULE_SIZE, check_game_over, deserialize_signature, encode_move_msg, legal_move,
-        get_game_turn, pop_capsule, verify_game_start, TIMEOUT_WINDOW
-    }
+            can_play, CAPSULE_SIZE, check_game_over, deserialize_signature, encode_move_msg, legal_move,
+            get_game_turn, pop_capsule, verify_game_start, TIMEOUT_WINDOW, highest_turn_note_getter
+        }
     };
 
     struct Storage {
@@ -67,7 +67,7 @@ contract TicTacToe {
 
     #[aztec(private)]
     fn answer_timeout(game_id: Field, row: u8, col: u8) {
-        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        let boards = storage.boards.at(game_id).get_notes(highest_turn_note_getter());
         assert(boards[0].is_some(), "Game does not exist.");
         let mut board = boards[0].unwrap_unchecked();
 
@@ -147,7 +147,7 @@ contract TicTacToe {
         second_signature: [u8; 64]
     ) {
         // Check if game has already been started
-        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        let boards = storage.boards.at(game_id).get_notes(highest_turn_note_getter());
         if (boards[0].is_none()) {
             let _ = context.call_private_function(
                 context.this_address(),
@@ -156,7 +156,7 @@ contract TicTacToe {
             );
         }
 
-        let mut board = storage.boards.at(game_id).get_notes(NoteGetterOptions::new())[0].unwrap_unchecked();
+        let mut board = storage.boards.at(game_id).get_notes(highest_turn_note_getter())[0].unwrap_unchecked();
 
         let mut culprit = if context.msg_sender() == board.host {
             board.challenger
@@ -234,7 +234,7 @@ contract TicTacToe {
 
     #[aztec(private)]
     fn dispute_timeout(game_id: Field, turn_index: u8, move: [u8; 2], signature: [u8; 64]) {
-        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        let boards = storage.boards.at(game_id).get_notes(highest_turn_note_getter());
         assert(boards[0].is_some(), "Game does not exist.");
 
         let mut board = boards[0].unwrap_unchecked();
@@ -337,7 +337,7 @@ contract TicTacToe {
 
     #[aztec(private)]
     fn turn(game_id: Field) -> bool {
-        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        let boards = storage.boards.at(game_id).get_notes(highest_turn_note_getter());
         let mut board = boards[0].unwrap_unchecked();
         assert(board.timeout_nullifier == 0, "Turn cannot be made on game with active timeout.");
 
@@ -349,10 +349,8 @@ contract TicTacToe {
         let timeout = turn[3] as bool;
         let mut game_over = false;
         legal_move(board.moves, row, col); // Check legal move
-
         // Remove note so we do not have duplicates
         storage.boards.at(game_id).remove(board);
-
         // Set next random nullifier
         board.nullifier = rand();
         let coord = row * 3 + col;
@@ -365,6 +363,9 @@ contract TicTacToe {
         }
         board.turn += 1;
         if (timeout) {
+            debug_log("Timeout triggered");
+            debug_log_format("Host: {0}", [board.host.to_field()]);
+            debug_log_format("Challenger: {0}", [board.challenger.to_field()]);
             board.timeout_nullifier = rand();
             let note_hash = board.compute_note_hash();
             context.call_public_function(
@@ -395,14 +396,31 @@ contract TicTacToe {
     }
 
     #[aztec(private)]
-    fn orchestrator(game_id: Field) {
+    fn orchestrator(game_id: Field, turn_index: Field) {
+        // trigger orchestrator first
+        let turn = turn_index as u8;
+        if turn > 3 {
+            let mut decrement_by = turn % 3;
+            if (decrement_by == 0) {
+                decrement_by = 3;
+            }
+            let inner_index = turn - decrement_by;
+            let _ = context.call_private_function(
+                context.this_address(),
+                FunctionSelector::from_signature("orchestrator(Field,Field)"),
+                [game_id, inner_index as Field]
+            );
+        }
+
+        // check if board is over
         let mut board = BoardNote::new(AztecAddress::from_field(0), AztecAddress::from_field(0));
-        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        let boards = storage.boards.at(game_id).get_notes(highest_turn_note_getter());
         if (boards[0].is_some()) {
             board = boards[0].unwrap_unchecked();
             assert(!board.over, "Game has ended."); // If game is over then revert
         }
 
+        // trigger this round of turns
         let mut end_condition = false;
         for i in 0..3 {
             if ((i == 0) & boards[0].is_none()) {
@@ -413,7 +431,6 @@ contract TicTacToe {
                     [game_id]
                 );
             } else if (!end_condition) {
-                debug_log_format("Turn {0}", [i as Field]);
                 end_condition = context.call_private_function(
                         context.this_address(),
                         FunctionSelector::from_signature("turn(Field)"),
@@ -421,19 +438,11 @@ contract TicTacToe {
                     )[0] as bool;
             }
         }
-
-        if (!end_condition) {
-            let _ = context.call_private_function(
-                context.this_address(),
-                FunctionSelector::from_signature("orchestrator(Field)"),
-                [game_id]
-            );
-        }
     }
 
     #[aztec(private)]
     fn trigger_timeout(game_id: Field) {
-        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        let boards = storage.boards.at(game_id).get_notes(highest_turn_note_getter());
         assert(boards[0].is_some(), "Game does not exist.");
         let mut board = boards[0].unwrap_unchecked();
         assert(!board.over, "Game has ended.");

@@ -60,7 +60,7 @@ describe("Tic Tac Toe", () => {
     // Clear out capsule stack each time tests are ran
     try {
       await emptyCapsuleStack(deployed);
-    } catch (err) { }
+    } catch (err) {}
   });
 
   describe("Test state channel over orchestrator function", () => {
@@ -75,7 +75,7 @@ describe("Tic Tac Toe", () => {
       );
       try {
         await emptyCapsuleStack(contract);
-      } catch (err) { }
+      } catch (err) {}
     });
 
     describe("Test game creation", () => {
@@ -123,7 +123,7 @@ describe("Tic Tac Toe", () => {
           Fr.fromString(numToHex(0)),
         ]);
 
-        const call = contract.methods.orchestrator(gameIndex);
+        const call = contract.methods.orchestrator(gameIndex, 1n);
         await expect(call.simulate()).rejects.toThrowError(
           /Challenger signature could not be verified/
         );
@@ -159,7 +159,7 @@ describe("Tic Tac Toe", () => {
         await accounts.alice.addCapsule(turnCapsules[0]);
         await pxe.addCapsule(openChannelCapsule);
 
-        const call = contract.methods.orchestrator(gameIndex);
+        const call = contract.methods.orchestrator(gameIndex, moves.length);
         await expect(call.simulate()).rejects.toThrowError(
           /Could not verify opponent signature./
         );
@@ -193,7 +193,7 @@ describe("Tic Tac Toe", () => {
         await accounts.alice.addCapsule(turnCapsules[0]);
         await accounts.alice.addCapsule(openChannelCapsule);
 
-        const call = contract.methods.orchestrator(gameIndex);
+        const call = contract.methods.orchestrator(gameIndex, moves.length);
         await expect(call.simulate()).rejects.toThrowError(
           /Could not verify sender signature./
         );
@@ -229,7 +229,7 @@ describe("Tic Tac Toe", () => {
         await accounts.alice.addCapsule(turnCapsules[0]);
         await accounts.alice.addCapsule(openChannelCapsule);
 
-        const call = contract.methods.orchestrator(gameIndex);
+        const call = contract.methods.orchestrator(gameIndex, moves.length);
         await expect(call.simulate()).rejects.toThrowError(
           /Could not verify sender signature./
         );
@@ -280,7 +280,7 @@ describe("Tic Tac Toe", () => {
         }
         await accounts.alice.addCapsule(openChannelCapsule);
 
-        const call = contract.methods.orchestrator(gameIndex);
+        const call = contract.methods.orchestrator(gameIndex, moves.length + 1);
         await expect(call.simulate()).rejects.toThrowError(
           /Sender is not challenger or host./
         );
@@ -319,7 +319,7 @@ describe("Tic Tac Toe", () => {
         }
         await accounts.alice.addCapsule(openChannelCapsule);
 
-        const call = contract.methods.orchestrator(gameIndex);
+        const call = contract.methods.orchestrator(gameIndex, moves.length + 1);
         await expect(call.simulate()).rejects.toThrowError(
           /Coordinate out of bounds./
         );
@@ -355,7 +355,7 @@ describe("Tic Tac Toe", () => {
         }
         await accounts.alice.addCapsule(openChannelCapsule);
 
-        const call = contract.methods.orchestrator(gameIndex);
+        const call = contract.methods.orchestrator(gameIndex, moves.length + 1);
         await expect(call.simulate()).rejects.toThrowError(
           /Coordinate out of bounds./
         );
@@ -394,7 +394,7 @@ describe("Tic Tac Toe", () => {
         }
         await accounts.alice.addCapsule(openChannelCapsule);
 
-        const call = contract.methods.orchestrator(gameIndex);
+        const call = contract.methods.orchestrator(gameIndex, moves.length + 1);
         await expect(call.simulate()).rejects.toThrowError(
           /Coordinate is already occupied./
         );
@@ -444,7 +444,7 @@ describe("Tic Tac Toe", () => {
         }
         await accounts.alice.addCapsule(openChannelCapsule);
 
-        const call = contract.methods.orchestrator(gameIndex);
+        const call = contract.methods.orchestrator(gameIndex, moves.length + 1);
         // would be "Only host can move" if bob tried to go
         await expect(call.simulate()).rejects.toThrowError(
           /Only challenger can move./
@@ -492,7 +492,7 @@ describe("Tic Tac Toe", () => {
         }
         await accounts.alice.addCapsule(openChannelCapsule);
 
-        const call = contract.methods.orchestrator(gameIndex);
+        const call = contract.methods.orchestrator(gameIndex, moves.length + 1);
         await expect(call.simulate()).rejects.toThrowError(
           /Could not verify sender signature./
         );
@@ -534,7 +534,7 @@ describe("Tic Tac Toe", () => {
         }
         await accounts.alice.addCapsule(openChannelCapsule);
 
-        await contract.methods.orchestrator(gameIndex).send().wait();
+        await contract.methods.orchestrator(gameIndex, moves.length + 1).send().wait();
         const game = await contract.methods.get_game(gameIndex).view();
 
         // ensure game outcome
@@ -568,12 +568,12 @@ describe("Tic Tac Toe", () => {
           await accounts.alice.addCapsule(turn);
         }
 
-        const call = contract.methods.orchestrator(gameIndex);
+        const call = contract.methods.orchestrator(gameIndex, turns.length);
         await expect(call.simulate()).rejects.toThrowError(/Game has ended./);
       });
 
-      xtest("Play game to draw", async () => {
-        const contract = await TicTacToeContract.at(
+      test("Play game to draw", async () => {
+        let contract = await TicTacToeContract.at(
           contractAddress,
           accounts.alice
         );
@@ -597,11 +597,10 @@ describe("Tic Tac Toe", () => {
           { row: 2, col: 2 },
         ];
         const turns = prepareTurns(
-          [{ row: 1, col: 2 }],
+          moves,
           gameIndex,
           accounts.alice,
           accounts.bob,
-          5
         );
 
         // encapsulate turns
@@ -613,15 +612,19 @@ describe("Tic Tac Toe", () => {
         }
         await accounts.alice.addCapsule(openChannelCapsule);
 
-        await contract.methods.orchestrator(gameIndex).send().wait();
-        const game = await contract.methods.get_game(gameIndex).view();
+        await contract.methods.orchestrator(gameIndex, moves.length + 1).send().wait();
 
+        contract = await TicTacToeContract.at(
+          contractAddress,
+          accounts.bob
+        );
+        const game = await contract.methods.get_game(gameIndex).view();
         // ensure game outcome
         expect(game.winner.inner).toEqual(0n);
         expect(game.over).toEqual(true);
       });
 
-      xtest("Subsequent move on game with draw should revert", async () => {
+      test("Subsequent move on game with draw should revert", async () => {
         // decrement game index to play on last game
         gameIndex--;
         const contract = await TicTacToeContract.at(
@@ -644,7 +647,7 @@ describe("Tic Tac Toe", () => {
         // add capsule
         await accounts.alice.addCapsule(turnCapsule);
 
-        const call = contract.methods.orchestrator(gameIndex);
+        const call = contract.methods.orchestrator(gameIndex, 1);
         await expect(call.simulate()).rejects.toThrowError(/Game has ended./);
       });
     });
@@ -704,7 +707,7 @@ describe("Tic Tac Toe", () => {
           accounts.bob
         );
 
-        const call = contract.methods.orchestrator(gameIndex);
+        const call = contract.methods.orchestrator(gameIndex, moves.length + 1);
         await expect(call.simulate()).rejects.toThrowError(
           /Could not verify opponent signature./
         );
@@ -745,7 +748,7 @@ describe("Tic Tac Toe", () => {
           contractAddress,
           accounts.bob
         );
-        await contract.methods.orchestrator(gameIndex).send().wait();
+        await contract.methods.orchestrator(gameIndex, moves.length + 1).send().wait();
 
         // Answer timeout as Alice
         contract = await TicTacToeContract.at(contractAddress, accounts.alice);
@@ -803,7 +806,7 @@ describe("Tic Tac Toe", () => {
           accounts.bob
         );
 
-        await contract.methods.orchestrator(gameIndex).send().wait();
+        await contract.methods.orchestrator(gameIndex, moves.length + 1).send().wait();
 
         // Answer timeout as Alice
         contract = await TicTacToeContract.at(contractAddress, accounts.alice);
@@ -847,7 +850,7 @@ describe("Tic Tac Toe", () => {
         }
         await accounts.alice.addCapsule(openChannelCapsule);
 
-        await contract.methods.orchestrator(gameIndex).send().wait();
+        await contract.methods.orchestrator(gameIndex, turns.length + 1).send().wait();
 
         // ensure timeout has been initiated
         const noteHash = await contract.methods
@@ -950,7 +953,7 @@ describe("Tic Tac Toe", () => {
         }
         await accounts.alice.addCapsule(openChannelCapsule);
 
-        await contract.methods.orchestrator(gameIndex).send().wait();
+        await contract.methods.orchestrator(gameIndex, moves.length + 1).send().wait();
 
         // Confirm that timeout has been triggered
         let noteHash = await contract.methods
@@ -1022,7 +1025,7 @@ describe("Tic Tac Toe", () => {
         await accounts.alice.addCapsule(openChannelCapsule);
 
         // post a game-winning timeout that doesn't actually end the game
-        await contract.methods.orchestrator(gameIndex).send().wait();
+        await contract.methods.orchestrator(gameIndex, moves.length + 1).send().wait();
 
         // bob answers timeout and forces a win. their move is discarded
         // if they don't answer, they'll just lose anyways
@@ -1076,7 +1079,7 @@ describe("Tic Tac Toe", () => {
           accounts.bob
         );
 
-        await contract.methods.orchestrator(gameIndex).send().wait();
+        await contract.methods.orchestrator(gameIndex, moves.length + 1).send().wait();
 
         // Confirm that timeout has been initiated
         const noteHash = await contract.methods
@@ -1116,7 +1119,7 @@ describe("Tic Tac Toe", () => {
         }
 
         // finalize game as alice
-        await contract.methods.orchestrator(gameIndex).send().wait();
+        await contract.methods.orchestrator(gameIndex, moves.length).send().wait();
 
         // Confirm that game has been won
         const boardUpdated = await contract.methods.get_board(gameIndex).view();
@@ -1163,7 +1166,7 @@ describe("Tic Tac Toe", () => {
           accounts.bob
         );
 
-        await contract.methods.orchestrator(gameIndex).send().wait();
+        await contract.methods.orchestrator(gameIndex, moves.length + 1).send().wait();
 
         // Answer timeout as Alice
         contract = await TicTacToeContract.at(contractAddress, accounts.alice);
@@ -1451,7 +1454,7 @@ describe("Tic Tac Toe", () => {
           contractAddress,
           accounts.alice
         );
-        const call = contract.methods.orchestrator(gameIndex);
+        const call = contract.methods.orchestrator(gameIndex, moves.length);
         await expect(call.simulate()).rejects.toThrowError(/Game has ended./);
       });
     });
@@ -1512,7 +1515,7 @@ describe("Tic Tac Toe", () => {
           contractAddress,
           accounts.bob
         );
-        await contract.methods.orchestrator(gameIndex).send().wait();
+        await contract.methods.orchestrator(gameIndex, moves.length + 1).send().wait();
 
         // attempt to dispute a timeout with an earlier turn as alice
         contract = await TicTacToeContract.at(contractAddress, accounts.alice);
@@ -1563,7 +1566,7 @@ describe("Tic Tac Toe", () => {
           contractAddress,
           accounts.bob
         );
-        await contract.methods.orchestrator(gameIndex).send().wait();
+        await contract.methods.orchestrator(gameIndex, moves.length + 1).send().wait();
 
         // create a random later move by bob signed by charlie
         let move = new Move(accounts.bob.getAddress(), 2, 2, 5, gameIndex);
@@ -1619,7 +1622,7 @@ describe("Tic Tac Toe", () => {
           contractAddress,
           accounts.bob
         );
-        await contract.methods.orchestrator(gameIndex).send().wait();
+        await contract.methods.orchestrator(gameIndex, moves.length + 1).send().wait();
         // make a signature on a different  move for turn 4 by bob
         // in practice a full channel would likely have been built to 5 when timeout triggered on 3
         const disputedTurnIndex = 3;
@@ -1689,7 +1692,7 @@ describe("Tic Tac Toe", () => {
           contractAddress,
           accounts.bob
         );
-        await contract.methods.orchestrator(gameIndex).send().wait();
+        await contract.methods.orchestrator(gameIndex, moves.length + 1).send().wait();
 
         // try to dispute a timeout with the same move / signature used in the timeout
         const disputedTurnIndex = 3;
@@ -1740,7 +1743,7 @@ describe("Tic Tac Toe", () => {
           contractAddress,
           accounts.bob
         );
-        await contract.methods.orchestrator(gameIndex).send().wait();
+        await contract.methods.orchestrator(gameIndex, moves.length + 1).send().wait();
 
         // make a signature by bob on turn #5 made by alice
         const disputedTurnIndex = 4;
@@ -1809,7 +1812,7 @@ describe("Tic Tac Toe", () => {
           contractAddress,
           accounts.bob
         );
-        await contract.methods.orchestrator(gameIndex).send().wait();
+        await contract.methods.orchestrator(gameIndex, moves.length + 1).send().wait();
 
         // ensure that the timeout is active
         const noteHash = await contract.methods

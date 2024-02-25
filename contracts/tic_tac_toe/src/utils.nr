@@ -1,20 +1,21 @@
 use dep::aztec::{
     context::PrivateContext,
     oracle::{
-        get_public_key::get_public_key,
-        debug_log::{debug_log_format, debug_log}
+        get_public_key::get_public_key
     },
     protocol_types::{
         abis::function_selector::FunctionSelector,
-        address::AztecAddress
-    }
+        address::AztecAddress,
+        constants::MAX_READ_REQUESTS_PER_CALL,
+    },
+    note::note_getter_options::NoteGetterOptions,
 };
 use dep::std::{
     option::Option,
     schnorr::verify_signature
 };
 use crate::types::{
-    board::BoardNote,
+    board::{BoardNote, BOARD_NOTE_LEN},
 };
 
 global CAPSULE_SIZE = 10; // Set to length of largest possible capsule (turn which requires move signed by both players)
@@ -26,6 +27,31 @@ global WINNING_PLACEMENTS = [
     [0, 3, 6], [1, 4, 7], [2, 5, 8],
     [0, 4, 8], [2, 4, 6]
 ];
+
+// needed to handle channel simulation after notes added via timeout
+// only returns one note
+pub fn board_note_turn_filter(
+    notes: [Option<BoardNote>; MAX_READ_REQUESTS_PER_CALL],
+    _p: Field
+) -> [Option<BoardNote>; MAX_READ_REQUESTS_PER_CALL] {
+    let mut selected = [Option::none(); MAX_READ_REQUESTS_PER_CALL];
+    let mut highest_turn = 0;
+    for i in 0..notes.len() {
+        // check if note exists
+        if notes[i].is_some() {
+            let note = notes[i].unwrap();
+            if note.turn >= highest_turn {
+                highest_turn = note.turn;
+                selected[0] = Option::some(note);
+            }
+        }
+    }
+    selected
+}
+
+pub fn highest_turn_note_getter() -> NoteGetterOptions<BoardNote, BOARD_NOTE_LEN, Field> {
+    NoteGetterOptions::with_filter(board_note_turn_filter, 0)
+}
 
 pub fn can_play(game: BoardNote, sender: Field) {
     assert(
@@ -117,12 +143,10 @@ pub fn get_game_turn(game: BoardNote, game_id: Field) -> [Field; 4] {
     let opponent_signature = deserialize_signature(opponent_s1, opponent_s2, opponent_s3);
 
     // Check that move has been authorized by specified player
-    debug_log_format("Turn: {0}=================", [game.turn as Field]);
     let move_msg = encode_move_msg(sender, game_id, game.turn, row as u8, col as u8);
 
     let challenger_pubkey = get_public_key(game.challenger);
     let host_pubkey = get_public_key(game.host);
-
     let sender_verified = if sender == game.host.to_field() {
         verify_signature(host_pubkey.x, host_pubkey.y, sender_signature, move_msg)
     } else {

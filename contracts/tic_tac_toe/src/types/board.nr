@@ -11,7 +11,6 @@ use dep::aztec::{
         rand::rand,
         get_public_key::get_public_key,
         nullifier_key::get_nullifier_secret_key,
-        debug_log::{debug_log, debug_log_format}
     },
     protocol_types::{
         address::AztecAddress,
@@ -147,29 +146,42 @@ impl BoardNote {
     }
 
     pub fn broadcast(self, context: &mut PrivateContext, slot: Field) {
-        // If timeout is triggered then broadcast note to both players in game
-        if(self.timeout_nullifier != 0) {
-            let recipients = [self.host, self.challenger];
-            for i in 0..2 {
-                emit_encrypted_log(
-                    context,
-                    (*context).this_address(),
-                    slot,
-                    get_public_key(recipients[i]),
-                    self.serialize()
-                );
-            }
-        } else {
-            let recipient = if (self.turn & 1) == 0 {
-                self.host
-            } else {
-                self.challenger
-            };
+        // // If timeout is triggered or game is over then broadcast note to both players in game
+        // // essentially handles any case where note goes onchain/ channel is posted
+        // if((self.timeout_nullifier != 0) | self.over) {
+        //     let recipients = [self.host, self.challenger];
+        //     for i in 0..2 {
+        //         emit_encrypted_log(
+        //             context,
+        //             (*context).this_address(),
+        //             slot,
+        //             get_public_key(recipients[i]),
+        //             self.serialize()
+        //         );
+        //     }
+        // } else {
+        //     let recipient = if (self.turn & 1) == 0 {
+        //         self.host
+        //     } else {
+        //         self.challenger
+        //     };
+        //     emit_encrypted_log(
+        //         context,
+        //         (*context).this_address(),
+        //         slot,
+        //         get_public_key(recipient),
+        //         self.serialize()
+        //     );
+        // }
+
+        // broadcasting is only done when going onchain. Sent to both channel particiapnts.
+        let recipients = [self.host, self.challenger];
+        for i in 0..2 {
             emit_encrypted_log(
                 context,
                 (*context).this_address(),
                 slot,
-                get_public_key(recipient),
+                get_public_key(recipients[i]),
                 self.serialize()
             );
         }
