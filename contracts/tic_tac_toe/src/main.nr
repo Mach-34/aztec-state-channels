@@ -21,9 +21,9 @@ contract TicTacToe {
     use crate::{
         types::{board::{BoardNote, BoardNoteMethods, BOARD_NOTE_LEN}, game::{Game, GameMethods, GAME_SERIALIZED_LEN}},
         utils::{
-        can_play, CAPSULE_SIZE, check_game_over, deserialize_signature, encode_move_msg, legal_move,
-        get_game_turn, pop_capsule, verify_game_start, TIMEOUT_WINDOW
-    }
+            can_play, CAPSULE_SIZE, check_game_over, deserialize_signature, encode_move_msg, legal_move,
+            get_game_turn, pop_capsule, verify_game_start, TIMEOUT_WINDOW, highest_turn_note_getter
+        }
     };
 
     struct Storage {
@@ -67,7 +67,7 @@ contract TicTacToe {
 
     #[aztec(private)]
     fn answer_timeout(game_id: Field, row: u8, col: u8) {
-        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        let boards = storage.boards.at(game_id).get_notes(highest_turn_note_getter());
         assert(boards[0].is_some(), "Game does not exist.");
         let mut board = boards[0].unwrap_unchecked();
 
@@ -147,7 +147,7 @@ contract TicTacToe {
         second_signature: [u8; 64]
     ) {
         // Check if game has already been started
-        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        let boards = storage.boards.at(game_id).get_notes(highest_turn_note_getter());
         if (boards[0].is_none()) {
             let _ = context.call_private_function(
                 context.this_address(),
@@ -156,7 +156,7 @@ contract TicTacToe {
             );
         }
 
-        let mut board = storage.boards.at(game_id).get_notes(NoteGetterOptions::new())[0].unwrap_unchecked();
+        let mut board = storage.boards.at(game_id).get_notes(highest_turn_note_getter())[0].unwrap_unchecked();
 
         let mut culprit = if context.msg_sender() == board.host {
             board.challenger
@@ -234,7 +234,7 @@ contract TicTacToe {
 
     #[aztec(private)]
     fn dispute_timeout(game_id: Field, turn_index: u8, move: [u8; 2], signature: [u8; 64]) {
-        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        let boards = storage.boards.at(game_id).get_notes(highest_turn_note_getter());
         assert(boards[0].is_some(), "Game does not exist.");
 
         let mut board = boards[0].unwrap_unchecked();
@@ -337,7 +337,7 @@ contract TicTacToe {
 
     #[aztec(private)]
     fn turn(game_id: Field) -> bool {
-        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        let boards = storage.boards.at(game_id).get_notes(highest_turn_note_getter());
         let mut board = boards[0].unwrap_unchecked();
         assert(board.timeout_nullifier == 0, "Turn cannot be made on game with active timeout.");
 
@@ -411,18 +411,15 @@ contract TicTacToe {
 
         // check if board is over
         let mut board = BoardNote::new(AztecAddress::from_field(0), AztecAddress::from_field(0));
-        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        let boards = storage.boards.at(game_id).get_notes(highest_turn_note_getter());
         if (boards[0].is_some()) {
             board = boards[0].unwrap_unchecked();
             assert(!board.over, "Game has ended."); // If game is over then revert
         }
 
-        debug_log_format("Board exists?: {0}", [boards[0].is_some() as Field]);
-
         // trigger this round of turns
         let mut end_condition = false;
         for i in 0..3 {
-            debug_log_format("Turn index: {0}", [turn_index - 3 + i as Field]);
             if ((i == 0) & boards[0].is_none()) {
                 // #### Open channel ####
                 let _ = context.call_private_function(
@@ -442,7 +439,7 @@ contract TicTacToe {
 
     #[aztec(private)]
     fn trigger_timeout(game_id: Field) {
-        let boards = storage.boards.at(game_id).get_notes(NoteGetterOptions::new());
+        let boards = storage.boards.at(game_id).get_notes(highest_turn_note_getter());
         assert(boards[0].is_some(), "Game does not exist.");
         let mut board = boards[0].unwrap_unchecked();
         assert(!board.over, "Game has ended.");

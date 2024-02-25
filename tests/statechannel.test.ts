@@ -76,7 +76,7 @@ describe("State Channel Test With Two PXEs", () => {
     // Clear out capsule stack each time tests are ran
     try {
       await emptyCapsuleStack(deployed);
-    } catch (err) { }
+    } catch (err) {}
   });
 
   describe("TicTacToe State Channel Single PXE", () => {
@@ -233,19 +233,13 @@ describe("State Channel Test With Two PXEs", () => {
       await channels.alice.finalize();
 
       // bob can see the draw
-      let contract = await TicTacToeContract.at(
-        contractAddress,
-        accounts.bob
-      );
+      let contract = await TicTacToeContract.at(contractAddress, accounts.bob);
       let game = await contract.methods.get_game(gameIndex).view();
       expect(game.over).toEqual(true);
       expect(game.winner.inner).toEqual(0n);
 
       // alice can see the draw
-      contract = await TicTacToeContract.at(
-        contractAddress,
-        accounts.alice
-      );
+      contract = await TicTacToeContract.at(contractAddress, accounts.alice);
       game = await contract.methods.get_game(gameIndex).view();
       expect(game.over).toEqual(true);
       expect(game.winner.inner).toEqual(0n);
@@ -302,90 +296,220 @@ describe("State Channel Test With Two PXEs", () => {
       expect(game.winner.inner).toEqual(accounts.bob.getAddress().toBigInt());
     });
 
-    // xtest("State Channel Timeout Answered (Won by Timeout Culprit)", async () => {
-    //   /// OPEN CHANNEL ///
-    //   // sign the channel open message as bob
-    //   let guestChannelOpenSignature = BaseStateChannel.signOpenChannel(
-    //     accounts.bob,
-    //     accounts.alice.getAddress(),
-    //     true
-    //   );
-    //   const openChannelResult = await channels.alice.openChannel(
-    //     guestChannelOpenSignature
-    //   );
-    //   channels.bob.insertOpenChannel(openChannelResult);
+    test("State Channel Timeout Answered (Won by Timeout Culprit)", async () => {
+      /// OPEN CHANNEL ///
+      // sign the channel open message as bob
+      let guestChannelOpenSignature = BaseStateChannel.signOpenChannel(
+        accounts.bob,
+        accounts.alice.getAddress(),
+        true
+      );
+      const openChannelResult = await channels.alice.openChannel(
+        guestChannelOpenSignature
+      );
+      channels.bob.insertOpenChannel(openChannelResult);
 
-    //   /// PLAY GAME ///
+      /// PLAY GAME ///
 
-    //   // turn 1
-    //   let move = channels.alice.buildMove(0, 0);
-    //   let opponentSignature = move.sign(accounts.bob);
-    //   let turnResult = await channels.alice.turn(move, opponentSignature);
+      // turn 1
+      let move = channels.alice.buildMove(0, 0);
+      let opponentSignature = move.sign(accounts.bob);
+      let turnResult = await channels.alice.turn(move, opponentSignature);
 
-    //   // turn 2 (TIMEOUT)
-    //   channels.bob.insertTurn(turnResult);
-    //   move = channels.bob.buildMove(2, 0);
-    //   // bob sends the move to alice, but she does not respond
-    //   turnResult = await channels.bob.turn(move);
+      // turn 2 (TIMEOUT)
+      channels.bob.insertTurn(turnResult);
+      move = channels.bob.buildMove(2, 0);
+      // bob sends the move to alice, but she does not respond
+      turnResult = await channels.bob.turn(move);
 
-    //   /// SUBMIT LATEST STATE WITH TIMEOUT ///
-    //   await channels.bob.finalize();
-    //   // ensure the onchain state reflects the execution of the state channel
-    //   let contract = await TicTacToeContract.at(contractAddress, accounts.bob);
+      /// SUBMIT LATEST STATE WITH TIMEOUT ///
+      await channels.bob.finalize();
+      // ensure the onchain state reflects the execution of the state channel
+      let contract = await TicTacToeContract.at(contractAddress, accounts.bob);
 
-    //   // check timeout is active
-    //   const noteHash = await contract.methods
-    //     .get_game_note_hash(gameIndex)
-    //     .view();
-    //   const timestamp = await contract.methods.get_timeout(noteHash).view();
-    //   expect(timestamp).not.toEqual(0n);
-    //   let board = await contract.methods.get_board(gameIndex).view();
-    //   expect(board.turn).toEqual(2n);
+      // check timeout is active
+      const noteHash = await contract.methods
+        .get_game_note_hash(gameIndex)
+        .view();
+      const timestamp = await contract.methods.get_timeout(noteHash).view();
+      expect(timestamp).not.toEqual(0n);
+      let board = await contract.methods.get_board(gameIndex).view();
+      expect(board.turn).toEqual(2n);
 
-    //   // ANSWER TIMEOUT
-    //   contract = await TicTacToeContract.at(contractAddress, accounts.alice);
-    //   let answer_res = await contract.methods.answer_timeout(gameIndex, 0, 1).send().wait();
+      // ANSWER TIMEOUT
+      contract = await TicTacToeContract.at(contractAddress, accounts.alice);
+      let answer_res = await contract.methods
+        .answer_timeout(gameIndex, 0, 1)
+        .send()
+        .wait();
 
-    //   // Confirm board state incremented to next turn
-    //   contract = await TicTacToeContract.at(contractAddress, accounts.bob);
-    //   board = await contract.methods.get_board(gameIndex).view();
-    //   expect(board.turn).toEqual(3n);
+      // Confirm board state incremented to next turn
+      contract = await TicTacToeContract.at(contractAddress, accounts.bob);
+      board = await contract.methods.get_board(gameIndex).view();
+      expect(board.turn).toEqual(3n);
 
-    //   // get starting note as bob
-    //   let txHash = answer_res.txHash;
-    //   const note = await accounts.bob.getNotes({ txHash }).then(notes => notes[0]);
-    //   console.log("Note: ", note)
-    //   // todo: provide way for opponent to get ExtendedNote without cooperation
+      // get starting note as bob
+      contract = await TicTacToeContract.at(contractAddress, accounts.bob);
+      let txHash = answer_res.txHash;
+      const note = await accounts.bob
+        .getNotes({ txHash })
+        .then((notes) => notes[0]);
 
-    //   /// CONTINUE GAME TO COMPLETION ///
+      /// CONTINUE GAME TO COMPLETION ///
 
-    //   let continued = {
-    //     alice: new ContinuedStateChannel(alicePXE, accounts.alice, contractAddress, gameIndex, 3),
-    //     bob: new ContinuedStateChannel(bobPXE, accounts.bob, contractAddress, gameIndex, 3),
-    //   }
+      const continued = {
+        alice: new ContinuedStateChannel(
+          alicePXE,
+          accounts.alice,
+          contractAddress,
+          gameIndex,
+          3
+        ),
+        bob: new ContinuedStateChannel(
+          bobPXE,
+          accounts.bob,
+          contractAddress,
+          gameIndex,
+          3
+        ),
+      };
 
-    //   // turn 4
-    //   move = continued.bob.buildMove(2, 1);
-    //   opponentSignature = move.sign(accounts.alice);
-    //   turnResult = await continued.bob.turn(move, opponentSignature);
+      // turn 4
+      move = continued.bob.buildMove(2, 1);
+      opponentSignature = move.sign(accounts.alice);
+      turnResult = await continued.bob.turn(move, opponentSignature);
 
-    //   // turn 5
-    //   continued.alice.insertTurn(turnResult);
-    //   move = continued.alice.buildMove(0, 2);
-    //   opponentSignature = move.sign(accounts.bob);
-    //   turnResult = await continued.alice.turn(move, opponentSignature);
+      // turn 5
+      continued.alice.insertTurn(turnResult);
+      move = continued.alice.buildMove(0, 2);
+      opponentSignature = move.sign(accounts.bob);
+      turnResult = await continued.alice.turn(move, opponentSignature);
 
-    //   // finalize continued game
-    //   await accounts.alice.addNote(note);
-    //   await continued.alice.finalize();
+      // finalize continued game
+      await accounts.alice.addNote(note);
+      await continued.alice.finalize();
 
-    //   // check alice won
-    //   const game = await contract.methods.get_game(gameIndex).view();
-    //   expect(game.winner.inner).toEqual(accounts.alice.getAddress().toBigInt());
-    // });
+      // check alice won
+      const game = await contract.methods.get_game(gameIndex).view();
+      expect(game.winner.inner).toEqual(accounts.alice.getAddress().toBigInt());
+    });
 
-    // test("State Channel Timeout Answered (Won by Timeout Initiator)", async () => {
-    //   // additional steps needed to ingest note from opponent
-    // })
+    xtest("State Channel Timeout Answered (Won by Timeout Initiator)", async () => {
+      /// OPEN CHANNEL ///
+      // sign the channel open message as bob
+      let guestChannelOpenSignature = BaseStateChannel.signOpenChannel(
+        accounts.bob,
+        accounts.alice.getAddress(),
+        true
+      );
+      const openChannelResult = await channels.alice.openChannel(
+        guestChannelOpenSignature
+      );
+      channels.bob.insertOpenChannel(openChannelResult);
+
+      /// PLAY GAME ///
+
+      // turn 1
+      let move = channels.alice.buildMove(1, 0);
+      let opponentSignature = move.sign(accounts.bob);
+      let turnResult = await channels.alice.turn(move, opponentSignature);
+
+      // turn 2 (TIMEOUT)
+      channels.bob.insertTurn(turnResult);
+      move = channels.bob.buildMove(0, 0);
+      // bob sends the move to alice, but she does not respond
+      turnResult = await channels.bob.turn(move);
+
+      /// SUBMIT LATEST STATE WITH TIMEOUT ///
+      await channels.bob.finalize();
+      // ensure the onchain state reflects the execution of the state channel
+      let contract = await TicTacToeContract.at(contractAddress, accounts.bob);
+
+      // check timeout is active
+      const noteHash = await contract.methods
+        .get_game_note_hash(gameIndex)
+        .view();
+      const timestamp = await contract.methods.get_timeout(noteHash).view();
+      expect(timestamp).not.toEqual(0n);
+      let board = await contract.methods.get_board(gameIndex).view();
+      expect(board.turn).toEqual(2n);
+
+      // ANSWER TIMEOUT
+      contract = await TicTacToeContract.at(contractAddress, accounts.alice);
+      let answer_res = await contract.methods
+        .answer_timeout(gameIndex, 1, 1)
+        .send()
+        .wait();
+
+      // Confirm board state incremented to next turn
+      contract = await TicTacToeContract.at(contractAddress, accounts.bob);
+      board = await contract.methods.get_board(gameIndex).view();
+      expect(board.turn).toEqual(3n);
+
+      // get starting note as bob
+      let txHash = answer_res.txHash;
+      const note = await accounts.bob
+        .getNotes({ txHash })
+        .then((notes) => notes[0]);
+
+      /// CONTINUE GAME TO COMPLETION ///
+      const continued = {
+        alice: new ContinuedStateChannel(
+          alicePXE,
+          accounts.alice,
+          contractAddress,
+          gameIndex,
+          3
+        ),
+        bob: new ContinuedStateChannel(
+          bobPXE,
+          accounts.bob,
+          contractAddress,
+          gameIndex,
+          3
+        ),
+      };
+
+      // turn 4
+      move = continued.bob.buildMove(2, 1);
+      opponentSignature = move.sign(accounts.alice);
+      turnResult = await continued.bob.turn(move, opponentSignature);
+      const note2 = await accounts.bob
+        .getNotes({ txHash });
+      console.log("note2: ", note2.length);
+
+      // turn 5
+      continued.alice.insertTurn(turnResult);
+      move = continued.alice.buildMove(1, 2);
+      opponentSignature = move.sign(accounts.bob);
+      turnResult = await continued.alice.turn(move, opponentSignature);
+      console.log("x0");
+      // turn 6
+      continued.bob.insertTurn(turnResult);
+      move = continued.bob.buildMove(0, 1);
+      opponentSignature = move.sign(accounts.alice);
+      turnResult = await continued.bob.turn(move, opponentSignature);
+
+      console.log("x1");
+      // turn 7
+      continued.alice.insertTurn(turnResult);
+      move = continued.alice.buildMove(2, 0);
+      opponentSignature = move.sign(accounts.bob);
+      turnResult = await continued.alice.turn(move, opponentSignature);
+      console.log("x2");
+      // turn 8 (WINNING MOVE)
+      continued.bob.insertTurn(turnResult);
+      move = continued.bob.buildMove(0, 2);
+      opponentSignature = move.sign(accounts.alice);
+      turnResult = await continued.bob.turn(move, opponentSignature);
+      console.log("x3");
+      // finalize continued game
+      await accounts.bob.addNote(note);
+      await continued.bob.finalize();
+
+      // check bob won
+      const game = await contract.methods.get_game(gameIndex).view();
+      expect(game.winner.inner).toEqual(accounts.bob.getAddress().toBigInt());
+    });
   });
 });

@@ -250,11 +250,11 @@ export class BaseStateChannel {
       cachedSimulations
     );
 
-    // loop through remaining calls
+    /// HIGHER ORDER ORCHESTRATOR CALLS ///
     while (startIndex < this.turnResults.length) {
       // set conditional inputs based on whether highest order orchestrator
       let numTurns = 3;
-      let orchestratorStart = startIndex + 4; // 3 turns + 1 for orchestrator
+      let orchestratorStart = startIndex + 4; // 3 turns + 1 for open_channel
       let msgSender = this.contractAddress;
       if (this.turnResults.length <= startIndex + 3) {
         numTurns = this.turnResults.length - startIndex;
