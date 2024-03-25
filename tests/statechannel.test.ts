@@ -754,7 +754,7 @@ describe("State Channel Test With Two PXEs", () => {
       // create a different turn for the fraud timeout
       // could use same turn, wouldn't matter
       let fraudulentTurn = fraudChannel.buildMove(2, 0);
-      await fraudChannel.turn(fraudulentTurn);
+      await fraudChannel.turn(fraudulentTurn, undefined, true);
       // finalize the fraud channel timeout
       await fraudChannel.finalize();
 

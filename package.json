@@ -1,5 +1,5 @@
 {
-  "name": "aztec-statechannel-tictactoe",
+  "name": "@mach-34/aztec-statechannel-tictactoe",
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
@@ -8,6 +8,7 @@
     "yarn": "please-use-npm"
   },
   "scripts": {
+    "build": "tsc --outDir dest",
     "artifacts": "./scripts/artifacts.sh",
     "anvil": "anvil -p 8545 --host 0.0.0.0 --chain-id 31337",
     "sandbox": "./../aztec-packages/yarn-project/aztec-sandbox/dest/bin/index.js",
@@ -26,21 +27,21 @@
     "jest": "^29.7.0",
     "ts-jest": "^29.1.1",
     "ts-node": "^10.9.1",
-    "typescript": "^5.2.2"
+    "typescript": "^5.4.3"
   },
   "dependencies": {
     "@aztec/accounts": "file:../aztec-packages/yarn-project/accounts",
     "@aztec/acir-simulator": "file:../aztec-packages/yarn-project/acir-simulator",
-    "@aztec/circuit-types": "file:../aztec-packages/yarn-project/circuit-types",
     "@aztec/aztec-node": "file:../aztec-packages/yarn-project/aztec-node",
     "@aztec/aztec.js": "file:../aztec-packages/yarn-project/aztec.js",
+    "@aztec/circuit-types": "file:../aztec-packages/yarn-project/circuit-types",
     "@aztec/circuits.js": "file:../aztec-packages/yarn-project/circuits.js",
     "@aztec/foundation": "file:../aztec-packages/yarn-project/foundation",
     "@aztec/l1-contracts": "file:../aztec-packages/yarn-project/l1-artifacts",
     "@aztec/noir-compiler": "file:../aztec-packages/yarn-project/noir-compiler",
     "@aztec/pxe": "file:../aztec-packages/yarn-project/pxe",
-    "@aztec/types": "file:../aztec-packages/yarn-project/types",
     "@aztec/sandbox": "file:../aztec-packages/yarn-project/aztec-sandbox",
+    "@aztec/types": "file:../aztec-packages/yarn-project/types",
     "@types/jest": "^29.5.6",
     "ethers": "^6.8.0"
   }

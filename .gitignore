@@ -6,3 +6,4 @@ contracts/target
 contracts/--compiler
 log
 crs
+dest
