@@ -166,7 +166,8 @@ export class BaseStateChannel {
    */
   public async turn(
     move: Move,
-    opponentSignature?: SchnorrSignature
+    opponentSignature?: SchnorrSignature,
+    timeout: boolean = false,
   ): Promise<AppExecutionResult> {
     // ensure subsequent turns can be built from the previously stored turn
     if (this.checkChannelOver()) throw new Error("Game is already over!");
@@ -181,7 +182,7 @@ export class BaseStateChannel {
         sender: move.sign(this.account),
         opponent: opponentSignature,
       },
-      timeout: opponentSignature === undefined,
+      timeout,
     });
     await this.account.addCapsule(turnCapsule);
     // get the packed arguments for the call

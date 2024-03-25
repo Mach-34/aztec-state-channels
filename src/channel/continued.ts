@@ -122,9 +122,6 @@ export class ContinuedStateChannel {
       this.contractAddress,
       sideEffectCounter
     );
-    // I DON'T KNOW WHY WE HAVE TO DO THIS
-    // result.callStackItem.publicInputs.endSideEffectCounter =
-    //   result.callStackItem.publicInputs.endSideEffectCounter.sub(new Fr(1));
     this.turnResults.push(result);
     return result;
   }

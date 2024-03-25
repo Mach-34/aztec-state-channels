@@ -1,5 +1,5 @@
 {
-  "name": "statechannel",
+  "name": "aztec-statechannel-tictactoe",
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
