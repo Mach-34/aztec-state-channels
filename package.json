@@ -1,7 +1,7 @@
 {
   "name": "@mach-34/aztec-statechannel-tictactoe",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "./dest/src/index.js",
   "license": "MIT",
   "type": "module",
   "engines": {
