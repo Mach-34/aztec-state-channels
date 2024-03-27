@@ -8,6 +8,7 @@ import {
   DebugLogger,
   Fr,
   PXE,
+  sleep,
 } from "@aztec/aztec.js";
 import { createAccount } from "@aztec/accounts/testing";
 import {
@@ -1863,4 +1864,20 @@ describe("Tic Tac Toe", () => {
       });
     });
   });
+
+  xit("Can use nudge to advance block", async () => {
+    // get contract
+    let contract = await TicTacToeContract.at(contractAddress, accounts.alice);
+    // get current block
+    const timestampPre = await cc.eth.timestamp()
+    await sleep(10000);
+    const timestampPost = await cc.eth.timestamp()
+    console.log("timestampPre", timestampPre);
+    console.log("timestampPost", timestampPost);
+    // nudge
+    await contract.methods.nudge().send().wait();
+    // get timestamp afterwards
+    const timestampAfter = await cc.eth.timestamp()
+    console.log("timestampAfter", timestampAfter);
+  })
 });

@@ -8,7 +8,7 @@ cd contracts/tic_tac_toe
 # Compile ACIR
 aztec-nargo compile
 # Generate TypeScript artifacts
-$AZTEC_CLI codegen ./target -o . --ts
+node $AZTEC_CLI codegen ./target -o . --ts
 # Update path for the ABI import in the typescript interface
 case "$OSTYPE" in
     darwin*)
