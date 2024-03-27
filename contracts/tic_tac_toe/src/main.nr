@@ -474,6 +474,12 @@ contract TicTacToe {
         storage.boards.at(game_id).insert(&mut board, true);
     }
 
+    // Arbitrary function that can be called to force the state to update
+    #[aztec(public)]
+    fn nudge() {
+        
+    }
+
     #[aztec(public)]
     internal fn assign_winner(game_index: Field, winner: AztecAddress) {
         let mut game = storage.games.at(game_index).read();
